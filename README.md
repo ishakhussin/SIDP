@@ -85,6 +85,24 @@ models/
 
 See [models/README.md](models/README.md) for the expected production layout.
 
+After installing the Python requirements, download the public models with:
+
+```powershell
+.\scripts\download_models.ps1
+```
+
+The PPE classifier is a custom trained model and has no public default URL. The model owner can provide a private or public download address without putting credentials in Git:
+
+```powershell
+$env:SENTRYLAB_PPE_MODEL_URL = "https://your-model-storage.example/ppe_multilabel_best.pt"
+$env:SENTRYLAB_MODEL_TOKEN = "optional-private-storage-token"
+.\scripts\download_models.ps1
+```
+
+The token exists only in the current PowerShell environment and is never saved by the script. A partial download is not accepted as an installed model.
+
+Model availability can be checked without loading PyTorch at [http://127.0.0.1:5000/api/models/status](http://127.0.0.1:5000/api/models/status). The dashboard displays `MODEL MISSING` when an enabled detector does not have all its files. The web application and automated tests can run without model weights, but live AI inference cannot.
+
 ## Camera configuration
 
 Edit `config/cameras.json` to configure USB cameras and enable or disable camera slots.

@@ -5,6 +5,7 @@ from flask import Flask
 from sentrylab.api.cameras import cameras_blueprint
 from sentrylab.api.health import health_blueprint
 from sentrylab.api.incidents import incidents_blueprint
+from sentrylab.api.models import models_blueprint
 from sentrylab.api.pages import pages_blueprint
 from sentrylab.api.ppe import ppe_blueprint
 from sentrylab.api.restricted_zone import restricted_zone_blueprint
@@ -20,6 +21,7 @@ from sentrylab.database import (
 )
 from sentrylab.services.detection_manager import DetectionManager
 from sentrylab.services.monitoring_heartbeat import MonitoringHeartbeatService
+from sentrylab.model_inventory import ModelInventory
 
 
 def create_app(settings: Settings | None = None) -> Flask:
@@ -40,6 +42,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.extensions["camera_manager"] = CameraManager.from_file(
         selected.config_dir / "cameras.json"
     )
+    app.extensions["model_inventory"] = ModelInventory(selected.model_dir)
     app.extensions["detection_manager"] = DetectionManager(
         camera_manager=app.extensions["camera_manager"],
         zone_repository=app.extensions["zone_repository"],
@@ -56,6 +59,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.register_blueprint(health_blueprint)
     app.register_blueprint(cameras_blueprint)
     app.register_blueprint(incidents_blueprint)
+    app.register_blueprint(models_blueprint)
     app.register_blueprint(pages_blueprint)
     app.register_blueprint(ppe_blueprint)
     app.register_blueprint(restricted_zone_blueprint)

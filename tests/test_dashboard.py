@@ -54,6 +54,8 @@ class DashboardTest(unittest.TestCase):
             self.assertIn(b"/detectors/restricted-zone", response.data)
             self.assertIn(b"/detectors/unsafe-proximity", response.data)
             self.assertIn(b"/detectors/ppe", response.data)
+            self.assertIn(b"/api/models/status", response.data)
+            self.assertIn(b"MODEL MISSING", response.data)
             self.assertIn(b"capture_fps", response.data)
             self.assertIn(b"/restricted-zone?preset=HOME", response.data)
             self.assertIn(b"/raw-stream", response.data)

@@ -15,6 +15,7 @@
         proximityStatus: {},
         ppe: {},
         ppeStatus: {},
+        modelStatus: null,
         configSnapshot: null,
         zonePoints: [],
         draggedZonePoint: -1,
@@ -106,10 +107,26 @@
         if (restricted.enabled) activeNames.push("Restricted Zone");
         if (proximity.enabled) activeNames.push("Unsafe Proximity");
         if (ppe.enabled) activeNames.push("PPE Compliance");
-        setText("ai-monitoring-status", activeNames.length ? "ACTIVE" : "OFF");
+        const activeDetectors = [];
+        if (restricted.enabled) activeDetectors.push("restricted_zone");
+        if (proximity.enabled) activeDetectors.push("unsafe_proximity");
+        if (ppe.enabled) activeDetectors.push("ppe_compliance");
+        const missingGroups = (state.modelStatus?.groups || []).filter(
+            (group) => activeDetectors.includes(group.detector) && !group.ready
+        );
+        setText("ai-monitoring-status", missingGroups.length
+            ? "MODEL MISSING"
+            : (activeNames.length ? "ACTIVE" : "OFF"));
+        const inactiveMissing = !activeNames.length && state.modelStatus && !state.modelStatus.ready;
         setText("ai-monitoring-detail",
-            detectorStatus?.last_error || proximityStatus?.last_error || ppeStatus?.last_error ||
-            (activeNames.length ? `${activeNames.join(" + ")} monitoring enabled` : "No AI detector enabled")
+            missingGroups.length
+                ? `Install models for ${missingGroups.map((group) => group.label).join(" + ")}`
+                : detectorStatus?.last_error || proximityStatus?.last_error || ppeStatus?.last_error ||
+                (activeNames.length
+                    ? `${activeNames.join(" + ")} monitoring enabled`
+                    : inactiveMissing
+                        ? `${state.modelStatus.missing_count} AI model files are not installed`
+                        : "No AI detector enabled")
         );
         setText("camera-status-last-update", camera?.last_frame_at
             ? new Date(camera.last_frame_at * 1000).toLocaleTimeString()
@@ -229,6 +246,15 @@
             setText("camera-operating-status", "OFFLINE");
         } finally {
             state.polling = false;
+        }
+    }
+
+    async function refreshModels() {
+        try {
+            state.modelStatus = await getJson("/api/models/status");
+            updateStatusCard();
+        } catch (_error) {
+            state.modelStatus = null;
         }
     }
 
@@ -625,8 +651,10 @@
         renderUseCases();
         selectCamera("CAM1");
         refreshCameras();
+        refreshModels();
         refreshIncidents();
         window.setInterval(refreshCameras, 2000);
+        window.setInterval(refreshModels, 30000);
         window.setInterval(refreshIncidents, 5000);
         window.setInterval(() => refreshRestrictedZone(selectedCameraId()), 5000);
     });

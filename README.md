@@ -107,11 +107,39 @@ Model availability can be checked without loading PyTorch at [http://127.0.0.1:5
 
 Edit `config/cameras.json` to configure USB cameras and enable or disable camera slots.
 
-For CAM 01, provide the RTSP address through an environment variable instead of saving credentials in Git:
+### Tapo CAM 01
+
+CAM 01 uses the Tapo RTSP stream. Before starting:
+
+1. In the Tapo mobile app, open the camera settings and create a **Camera Account** under Advanced Settings. This is different from the normal TP-Link account.
+2. Find the camera's local IP address under Device Info. The camera and SentryLab computer must be on the same local network.
+3. Test the high-quality stream without saving or displaying the password:
 
 ```powershell
-$env:SENTRYLAB_CAM01_RTSP_URL = "rtsp://username:password@camera-address/stream"
+.\scripts\setup_tapo.ps1 -TestOnly
 ```
+
+4. When the test reports `CAM 01 ONLINE`, start SentryLab through the same secure launcher:
+
+```powershell
+.\scripts\setup_tapo.ps1
+```
+
+The launcher asks for the camera IP address, Camera Account username, and password. It URL-encodes special characters, uses RTSP over TCP, verifies that a real frame arrives, and then starts the application. Credentials exist only in that PowerShell process and are never written into the repository or printed.
+
+Use the lower-resolution Tapo stream when the network or AI pipeline needs less load:
+
+```powershell
+.\scripts\setup_tapo.ps1 -Stream 2
+```
+
+Advanced users can provide the RTSP address directly through an environment variable:
+
+```powershell
+$env:SENTRYLAB_CAM01_RTSP_URL = "rtsp://username:password@camera-address:554/stream1"
+```
+
+TP-Link's official instructions are available in [How to View Tapo Camera Using RTSP/ONVIF](https://www.tp-link.com/us/support/faq/2680/).
 
 The included configuration uses:
 

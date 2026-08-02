@@ -178,6 +178,10 @@ Verify it after installation with:
 The expected result begins with `True`. A `False` result means depth processing
 has fallen back to the CPU and will be substantially slower.
 
+Unsafe Proximity refreshes metric depth every 2.0 seconds. On the production
+RTX 4050, a warmed 1080p DepthPro pass takes about 1.36 seconds, leaving about
+0.64 seconds per cycle for the other detectors and live-stream rendering.
+
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in a browser. Stop the application with `Ctrl+C`.
 
 ## ESP32 audio alarm

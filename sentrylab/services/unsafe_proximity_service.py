@@ -24,7 +24,7 @@ class UnsafeProximityService:
         incident_repository,
         evidence_recorder,
         person_interval_seconds: float = 0.18,
-        depth_interval_seconds: float = 2.5,
+        depth_interval_seconds: float = 2.0,
         vote_interval_seconds: float = 1.0,
         result_ttl_seconds: float = 5.0,
     ) -> None:

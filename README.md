@@ -167,6 +167,17 @@ The included configuration uses:
 python app.py
 ```
 
+On the Windows production laptop, `requirements.txt` installs the official
+CUDA 12.8 PyTorch build so DepthPro, PPE, and YOLO can use the NVIDIA GPU.
+Verify it after installation with:
+
+```powershell
+.\.venv\Scripts\python.exe -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```
+
+The expected result begins with `True`. A `False` result means depth processing
+has fallen back to the CPU and will be substantially slower.
+
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in a browser. Stop the application with `Ctrl+C`.
 
 ## ESP32 audio alarm

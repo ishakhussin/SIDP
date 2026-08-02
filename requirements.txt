@@ -5,7 +5,11 @@ Pillow
 requests
 onvif-zeep
 pyserial
-torch
-torchvision
+# Windows production uses the RTX 4050 through the official PyTorch CUDA index.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128; sys_platform == "win32"
+torchvision==0.26.0+cu128; sys_platform == "win32"
+torch; sys_platform != "win32"
+torchvision; sys_platform != "win32"
 transformers
 ultralytics

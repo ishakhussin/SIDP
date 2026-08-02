@@ -3,6 +3,7 @@ numpy
 opencv-python
 Pillow
 requests
+onvif-zeep
 pyserial
 torch
 torchvision

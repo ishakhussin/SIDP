@@ -23,6 +23,7 @@ from sentrylab.database import (
 from sentrylab.services.detection_manager import DetectionManager
 from sentrylab.services.monitoring_heartbeat import MonitoringHeartbeatService
 from sentrylab.services.serial_alarm import SerialAlarmService
+from sentrylab.services.ptz import TapoPtzController
 from sentrylab.model_inventory import ModelInventory
 
 
@@ -44,6 +45,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.extensions["camera_manager"] = CameraManager.from_file(
         selected.config_dir / "cameras.json"
     )
+    app.extensions["ptz_controller"] = TapoPtzController()
     app.extensions["model_inventory"] = ModelInventory(selected.model_dir)
     app.extensions["detection_manager"] = DetectionManager(
         camera_manager=app.extensions["camera_manager"],

@@ -6,12 +6,20 @@
         Object.entries(CAMERA_IDS).map(([slot, id]) => [id, slot])
     );
     const SELECTED_CAMERA_KEY = "sentrylab.selectedCameraSlot";
+    const ZOOM_LEVELS_KEY = "sentrylab.cameraZoomLevels";
     function savedCameraSlot() {
         try {
             const slot = window.localStorage.getItem(SELECTED_CAMERA_KEY);
             return CAMERA_IDS[slot] ? slot : "CAM1";
         } catch (_error) {
             return "CAM1";
+        }
+    }
+    function savedZoomLevels() {
+        try {
+            return { "CAM 01": 1, "CAM 02": 1, ...JSON.parse(window.localStorage.getItem(ZOOM_LEVELS_KEY) || "{}") };
+        } catch (_error) {
+            return { "CAM 01": 1, "CAM 02": 1 };
         }
     }
     const state = {
@@ -26,6 +34,11 @@
         ppeStatus: {},
         modelStatus: null,
         alarmStatus: null,
+        controls: {},
+        presets: {},
+        zoomLevels: savedZoomLevels(),
+        presetSaveMode: false,
+        controlBusy: false,
         configSnapshot: null,
         zonePoints: [],
         draggedZonePoint: -1,
@@ -272,6 +285,7 @@
         updatePowerButton();
         renderUseCases();
         showSelectedFeed();
+        refreshCameraControls(selectedCameraId());
         refreshRestrictedZone(selectedCameraId());
         refreshIncidents();
     }
@@ -295,6 +309,7 @@
             updateSelectorDots();
             updateStatusCard();
             updatePowerButton();
+            updateCameraControls();
             if (
                 previousFeed !== state.feedEnabled[state.selectedSlot]
                 || previousCameraState !== selectedCamera()?.state
@@ -414,12 +429,14 @@
             if (!result.power_on) hideFeeds();
             updateStatusCard();
             updatePowerButton();
+            updateCameraControls();
             showSelectedFeed();
             await refreshRestrictedZone(cameraId);
         } catch (error) {
             window.alert(`Could not turn ${cameraId} ${on ? "on" : "off"}.\n\n${error.message}`);
         } finally {
             updatePowerButton();
+            updateCameraControls();
         }
     }
 
@@ -670,12 +687,144 @@
         }
     }
 
-    function disableFutureControls() {
-        all(".ptz-control, .preset-btn, #patrol-toggle, #zoom-in, #zoom-out").forEach((element) => {
-            element.disabled = true;
-            element.classList.add("opacity-30", "cursor-not-allowed");
-            element.title = "PTZ integration is scheduled for a later stage";
+    function storeZoomLevels() {
+        try {
+            window.localStorage.setItem(ZOOM_LEVELS_KEY, JSON.stringify(state.zoomLevels));
+        } catch (_error) {
+            // Zoom still works for the current page when storage is unavailable.
+        }
+    }
+
+    function applyDigitalZoom() {
+        const level = Number(state.zoomLevels[selectedCameraId()] || 1);
+        ["pose-stream-img", "tapo-stream-img"].forEach((id) => {
+            const image = byId(id);
+            if (image) {
+                image.style.transform = `scale(${level})`;
+                image.style.transformOrigin = "center center";
+            }
         });
+        setText("current-zoom-text", `${level.toFixed(2).replace(/0$/, "")}x`);
+        setText("overlay-zoom-text", `ZOOM: ${level.toFixed(2).replace(/0$/, "")}x`);
+    }
+
+    function setControlDisabled(element, disabled, title = "") {
+        if (!element) return;
+        element.disabled = disabled;
+        element.classList.toggle("opacity-30", disabled);
+        element.classList.toggle("cursor-not-allowed", disabled);
+        element.title = title;
+    }
+
+    function updateCameraControls() {
+        const cameraId = selectedCameraId();
+        const capability = state.controls[cameraId] || {};
+        const cameraOn = Boolean(selectedCamera()?.power_on);
+        const zoom = Number(state.zoomLevels[cameraId] || 1);
+        const zoomAvailable = Boolean(capability.digital_zoom && cameraOn);
+        setControlDisabled(byId("zoom-out"), !zoomAvailable || zoom <= (capability.min_zoom || 1),
+            cameraOn ? "Zoom out" : "Turn the camera on first");
+        setControlDisabled(byId("zoom-in"), !zoomAvailable || zoom >= (capability.max_zoom || 3),
+            cameraOn ? "Zoom in" : "Turn the camera on first");
+
+        const ptzAvailable = Boolean(capability.pan_tilt && capability.configured && cameraOn && !state.controlBusy);
+        all(".ptz-control").forEach((button) => setControlDisabled(
+            button,
+            !ptzAvailable,
+            cameraId === "CAM 02" ? "CAM 02 supports zoom only" :
+                (!capability.configured ? "Start CAM 01 with scripts/setup_tapo.ps1" : "Move Tapo camera")
+        ));
+        const presetAvailable = Boolean(capability.presets && capability.configured && cameraOn && !state.controlBusy);
+        all(".preset-btn").forEach((button) => {
+            setControlDisabled(button, !presetAvailable,
+                cameraId === "CAM 02" ? "Presets are only available on CAM 01" : "Open saved position");
+            const saved = Boolean(state.presets[cameraId]?.[button.dataset.preset]);
+            button.classList.toggle("border-primary", saved);
+            button.classList.toggle("text-primary", saved);
+        });
+        setControlDisabled(byId("save-preset-mode"), !presetAvailable,
+            "Save the current Tapo direction into P1, P2, or P3");
+        byId("save-preset-mode")?.classList.toggle("bg-primary/20", state.presetSaveMode);
+        byId("save-preset-mode")?.classList.toggle("text-primary", state.presetSaveMode);
+        setControlDisabled(byId("patrol-toggle"), true, "Auto Patrol will be added after manual PTZ validation");
+        byId("joystick-container")?.classList.toggle("opacity-40", !ptzAvailable);
+        setText("camera-control-status",
+            cameraId === "CAM 02"
+                ? "CAM 02: digital zoom only."
+                : !capability.configured
+                    ? "CAM 01: start with setup_tapo.ps1 to enable pan, tilt and presets."
+                    : state.presetSaveMode
+                        ? "Save mode: choose P1, P2 or P3."
+                        : "CAM 01: digital zoom + physical pan/tilt. Presets with a blue border are saved."
+        );
+        applyDigitalZoom();
+    }
+
+    async function refreshCameraControls(cameraId = selectedCameraId()) {
+        try {
+            const capability = await getJson(`/api/cameras/${encodeURIComponent(cameraId)}/controls`);
+            state.controls[cameraId] = capability;
+            if (capability.presets && capability.configured) {
+                try {
+                    const response = await getJson(`/api/cameras/${encodeURIComponent(cameraId)}/presets`);
+                    state.presets[cameraId] = response.presets || {};
+                } catch (error) {
+                    capability.last_error = error.message;
+                }
+            }
+        } catch (error) {
+            state.controls[cameraId] = { digital_zoom: true, pan_tilt: false, presets: false, last_error: error.message };
+        }
+        if (cameraId === selectedCameraId()) updateCameraControls();
+    }
+
+    function changeZoom(delta) {
+        const cameraId = selectedCameraId();
+        const capability = state.controls[cameraId] || { min_zoom: 1, max_zoom: 3 };
+        const value = Number(state.zoomLevels[cameraId] || 1) + delta;
+        state.zoomLevels[cameraId] = Math.max(capability.min_zoom || 1, Math.min(capability.max_zoom || 3, value));
+        storeZoomLevels();
+        updateCameraControls();
+        const indicator = byId("zoom-indicator");
+        indicator?.classList.remove("opacity-0");
+        window.setTimeout(() => indicator?.classList.add("opacity-0"), 700);
+    }
+
+    async function runPtz(action) {
+        state.controlBusy = true;
+        updateCameraControls();
+        try {
+            await getJson(`/api/cameras/${encodeURIComponent(selectedCameraId())}/ptz`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: action.toLowerCase() }),
+            });
+        } catch (error) {
+            window.alert(`Tapo control failed.\n\n${error.message}`);
+        } finally {
+            state.controlBusy = false;
+            updateCameraControls();
+        }
+    }
+
+    async function usePreset(slot) {
+        const action = state.presetSaveMode ? "save" : "goto";
+        state.controlBusy = true;
+        updateCameraControls();
+        try {
+            await getJson(`/api/cameras/${encodeURIComponent(selectedCameraId())}/presets/${slot}`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action }),
+            });
+            if (action === "save") {
+                state.presets[selectedCameraId()] = { ...(state.presets[selectedCameraId()] || {}), [slot]: true };
+                state.presetSaveMode = false;
+            }
+        } catch (error) {
+            window.alert(`Tapo preset failed.\n\n${error.message}`);
+        } finally {
+            state.controlBusy = false;
+            updateCameraControls();
+        }
     }
 
     function initializePlaceholders() {
@@ -708,6 +857,18 @@
             setSelectedCameraPower(!state.feedEnabled[state.selectedSlot]);
         });
         byId("recent-events-refresh")?.addEventListener("click", manualRefreshIncidents);
+        byId("zoom-in")?.addEventListener("click", () => changeZoom(0.25));
+        byId("zoom-out")?.addEventListener("click", () => changeZoom(-0.25));
+        all(".ptz-control").forEach((button) => {
+            button.addEventListener("click", () => runPtz(button.dataset.dir));
+        });
+        byId("save-preset-mode")?.addEventListener("click", () => {
+            state.presetSaveMode = !state.presetSaveMode;
+            updateCameraControls();
+        });
+        all(".preset-btn").forEach((button) => {
+            button.addEventListener("click", () => usePreset(button.dataset.preset));
+        });
         byId("fullscreen-toggle")?.addEventListener("click", async () => {
             const container = byId("video-feed-container");
             if (!document.fullscreenElement) await container?.requestFullscreen();
@@ -751,7 +912,6 @@
             if (!byId("zone-editor-modal")?.classList.contains("hidden")) resizeZoneCanvas();
         });
 
-        disableFutureControls();
         initializePlaceholders();
         renderUseCases();
         selectCamera(state.selectedSlot);

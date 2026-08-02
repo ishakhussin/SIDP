@@ -141,6 +141,20 @@ $env:SENTRYLAB_CAM01_RTSP_URL = "rtsp://username:password@camera-address:554/str
 
 TP-Link's official instructions are available in [How to View Tapo Camera Using RTSP/ONVIF](https://www.tp-link.com/us/support/faq/2680/).
 
+### Camera controls
+
+- **CAM 01 (Tapo C200):** digital zoom plus real ONVIF pan and tilt on port 2020.
+- **CAM 02 (eMeet USB):** digital zoom only; it has no pan/tilt motor.
+- Zoom is remembered separately for each camera in the browser. It changes the
+  operator's view only; detection continues on the complete source frame.
+- To calibrate a Tapo preset, move CAM 01 to the required position, click
+  **Save Current**, then click **P1**, **P2**, or **P3**. A normal preset click
+  moves the camera back to that saved position.
+
+CAM 01 controls use the same temporary Camera Account credentials collected by
+`scripts/setup_tapo.ps1`; credentials are not stored in the project. Install
+`onvif-zeep` through `pip install -r requirements.txt` before using motor controls.
+
 The included configuration uses:
 
 - CAM 01: Tapo C200 through RTSP

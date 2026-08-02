@@ -77,6 +77,18 @@ class DashboardTest(unittest.TestCase):
         self.assertIn(b'id="recent-events-refresh"', response.data)
         self.assertIn(b'Refresh recent events', response.data)
 
+    def test_camera_control_ui_is_connected(self):
+        page = self.client.get("/sentrylab-dashboard.html")
+        script = self.client.get("/static/dashboard.js")
+        try:
+            self.assertIn(b"save-preset-mode", page.data)
+            self.assertIn(b"/controls", script.data)
+            self.assertIn(b"/ptz", script.data)
+            self.assertIn(b"ZOOM_LEVELS_KEY", script.data)
+        finally:
+            page.close()
+            script.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,7 @@
 from flask import Blueprint, Response, current_app, jsonify, request
 
 from sentrylab.streaming import encode_jpeg, mjpeg_generator
+from sentrylab.services.ptz import PtzError
 
 
 cameras_blueprint = Blueprint("cameras", __name__)
@@ -10,6 +11,10 @@ cameras_blueprint = Blueprint("cameras", __name__)
 
 def _manager():
     return current_app.extensions["camera_manager"]
+
+
+def _ptz():
+    return current_app.extensions["ptz_controller"]
 
 
 def _render(camera_id: str, frame):
@@ -27,6 +32,49 @@ def camera_status(camera_id: str):
         return jsonify(_manager().status(camera_id))
     except KeyError:
         return jsonify({"error": "Camera not found"}), 404
+
+
+@cameras_blueprint.get("/api/cameras/<path:camera_id>/controls")
+def camera_controls(camera_id: str):
+    try:
+        _manager().status(camera_id)
+    except KeyError:
+        return jsonify({"error": "Camera not found"}), 404
+    return jsonify(_ptz().capabilities(camera_id))
+
+
+@cameras_blueprint.post("/api/cameras/<path:camera_id>/ptz")
+def camera_ptz(camera_id: str):
+    if camera_id != "CAM 01":
+        return jsonify({"error": "Physical pan and tilt are only available on CAM 01"}), 409
+    action = str((request.get_json(silent=True) or {}).get("action", "")).lower()
+    try:
+        result = _ptz().home() if action == "home" else _ptz().move(action)
+        return jsonify(result)
+    except PtzError as error:
+        return jsonify({"error": str(error)}), 502
+
+
+@cameras_blueprint.get("/api/cameras/<path:camera_id>/presets")
+def camera_presets(camera_id: str):
+    if camera_id != "CAM 01":
+        return jsonify({"error": "Presets are only available on CAM 01"}), 409
+    try:
+        return jsonify({"presets": _ptz().preset_status()})
+    except PtzError as error:
+        return jsonify({"error": str(error)}), 502
+
+
+@cameras_blueprint.post("/api/cameras/<path:camera_id>/presets/<slot>")
+def camera_preset_action(camera_id: str, slot: str):
+    if camera_id != "CAM 01":
+        return jsonify({"error": "Presets are only available on CAM 01"}), 409
+    action = str((request.get_json(silent=True) or {}).get("action", "goto")).lower()
+    try:
+        result = _ptz().save_preset(slot) if action == "save" else _ptz().goto_preset(slot)
+        return jsonify(result)
+    except PtzError as error:
+        return jsonify({"error": str(error)}), 502
 
 
 @cameras_blueprint.put("/api/cameras/<path:camera_id>/power")

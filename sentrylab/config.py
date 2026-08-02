@@ -18,6 +18,8 @@ class Settings:
     database_path: Path
     clips_dir: Path
     log_level: str = "INFO"
+    alarm_serial_port: str | None = None
+    alarm_baud_rate: int = 115200
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -33,4 +35,6 @@ class Settings:
             database_path=data_dir / "events.db",
             clips_dir=data_dir / "clips",
             log_level=os.getenv("SENTRYLAB_LOG_LEVEL", "INFO").upper(),
+            alarm_serial_port=os.getenv("SENTRYLAB_ALARM_COM_PORT") or None,
+            alarm_baud_rate=int(os.getenv("SENTRYLAB_ALARM_BAUD_RATE", "115200")),
         )

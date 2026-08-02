@@ -22,6 +22,7 @@ class Runtime:
         self._camera_manager = None
         self._detection_manager = None
         self._monitoring_heartbeat = None
+        self._serial_alarm = None
 
     @property
     def started(self) -> bool:
@@ -41,6 +42,8 @@ class Runtime:
             self._detection_manager.start_enabled()
             self._monitoring_heartbeat = app.extensions["monitoring_heartbeat"]
             self._monitoring_heartbeat.start()
+            self._serial_alarm = app.extensions["serial_alarm"]
+            self._serial_alarm.start()
             self._started = True
             LOGGER.info("SentryLab runtime started")
 
@@ -52,9 +55,13 @@ class Runtime:
             manager = self._camera_manager
             detection_manager = self._detection_manager
             monitoring_heartbeat = self._monitoring_heartbeat
+            serial_alarm = self._serial_alarm
             self._camera_manager = None
             self._detection_manager = None
             self._monitoring_heartbeat = None
+            self._serial_alarm = None
+        if serial_alarm is not None:
+            serial_alarm.stop()
         if monitoring_heartbeat is not None:
             monitoring_heartbeat.stop()
         if detection_manager is not None:

@@ -16,6 +16,7 @@
         ppe: {},
         ppeStatus: {},
         modelStatus: null,
+        alarmStatus: null,
         configSnapshot: null,
         zonePoints: [],
         draggedZonePoint: -1,
@@ -76,6 +77,34 @@
             if (selector) selector.classList.toggle("cam-active", slot === state.selectedSlot);
             if (dot) dot.className = `indicator-dot w-2 h-2 rounded-full ${tone.dot}`;
         });
+    }
+
+    function updateAlarmCard() {
+        const alarm = state.alarmStatus;
+        let label = "NOT SET";
+        let detail = "Set SENTRYLAB_ALARM_COM_PORT to enable the ESP32 alarm";
+        let classes = "bg-surface-variant text-on-surface-variant";
+        if (alarm?.alarm_active) {
+            label = "SOUNDING";
+            detail = alarm.unsafe_sources.length
+                ? `UNSAFE: ${alarm.unsafe_sources.join(" + ")}`
+                : "Confirmed unsafe condition";
+            classes = "bg-red-500/20 text-red-400";
+        } else if (alarm?.connected) {
+            label = "CONNECTED";
+            detail = `${alarm.port} at ${alarm.baud_rate} baud`;
+            classes = "bg-green-500/20 text-green-400";
+        } else if (alarm?.configured) {
+            label = "RECONNECTING";
+            detail = alarm.last_error || `Waiting for ESP32 on ${alarm.port}`;
+            classes = "bg-yellow-500/20 text-yellow-400";
+        }
+        setText("audio-alarm-status", label);
+        setText("audio-alarm-detail", detail);
+        const badge = byId("audio-alarm-status");
+        if (badge) {
+            badge.className = `px-2.5 py-1 text-[10px] font-bold rounded-full ${classes}`;
+        }
     }
 
     function updateStatusCard() {
@@ -256,6 +285,15 @@
         } catch (_error) {
             state.modelStatus = null;
         }
+    }
+
+    async function refreshAlarm() {
+        try {
+            state.alarmStatus = await getJson("/api/alarm/status");
+        } catch (_error) {
+            state.alarmStatus = null;
+        }
+        updateAlarmCard();
     }
 
     function renderRecentIncidents(incidents) {
@@ -652,9 +690,11 @@
         selectCamera("CAM1");
         refreshCameras();
         refreshModels();
+        refreshAlarm();
         refreshIncidents();
         window.setInterval(refreshCameras, 2000);
         window.setInterval(refreshModels, 30000);
+        window.setInterval(refreshAlarm, 2000);
         window.setInterval(refreshIncidents, 5000);
         window.setInterval(() => refreshRestrictedZone(selectedCameraId()), 5000);
     });

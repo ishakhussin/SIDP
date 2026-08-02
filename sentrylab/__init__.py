@@ -3,6 +3,7 @@
 from flask import Flask
 
 from sentrylab.api.cameras import cameras_blueprint
+from sentrylab.api.alarm import alarm_blueprint
 from sentrylab.api.health import health_blueprint
 from sentrylab.api.incidents import incidents_blueprint
 from sentrylab.api.models import models_blueprint
@@ -21,6 +22,7 @@ from sentrylab.database import (
 )
 from sentrylab.services.detection_manager import DetectionManager
 from sentrylab.services.monitoring_heartbeat import MonitoringHeartbeatService
+from sentrylab.services.serial_alarm import SerialAlarmService
 from sentrylab.model_inventory import ModelInventory
 
 
@@ -56,6 +58,13 @@ def create_app(settings: Settings | None = None) -> Flask:
         detection_manager=app.extensions["detection_manager"],
         repository=app.extensions["monitoring_log_repository"],
     )
+    app.extensions["serial_alarm"] = SerialAlarmService(
+        camera_manager=app.extensions["camera_manager"],
+        detection_manager=app.extensions["detection_manager"],
+        port=selected.alarm_serial_port,
+        baud_rate=selected.alarm_baud_rate,
+    )
+    app.register_blueprint(alarm_blueprint)
     app.register_blueprint(health_blueprint)
     app.register_blueprint(cameras_blueprint)
     app.register_blueprint(incidents_blueprint)

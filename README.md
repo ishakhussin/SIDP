@@ -155,6 +155,23 @@ python app.py
 
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in a browser. Stop the application with `Ctrl+C`.
 
+## ESP32 audio alarm
+
+Flash the firmware in [`firmware/sentrylab_audio_alarm`](firmware/sentrylab_audio_alarm), connect the ESP32 to the laptop by USB, and close Arduino Serial Monitor. Configure the detected Windows COM port before starting SentryLab:
+
+```powershell
+$env:SENTRYLAB_ALARM_COM_PORT = "COM5"
+python app.py
+```
+
+To test the speaker independently of AI detection and the dashboard:
+
+```powershell
+python .\scripts\test_alarm.py --port COM5 --seconds 3
+```
+
+The laptop sends a command every second. The ESP32 loops `0001.mp3` while any Restricted Zone, Unsafe Proximity, or PPE subject has a confirmed `UNSAFE` level. The alarm continues when another use case remains unsafe and stops only after every use case has remained clear for two continuous seconds. A serial failure does not crash Flask; SentryLab reconnects automatically and exposes its state at `/api/alarm/status` and on the dashboard.
+
 ## Run the tests
 
 ```powershell

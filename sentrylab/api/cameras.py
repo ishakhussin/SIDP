@@ -77,6 +77,20 @@ def camera_preset_action(camera_id: str, slot: str):
         return jsonify({"error": str(error)}), 502
 
 
+@cameras_blueprint.post("/api/cameras/<path:camera_id>/patrol")
+def camera_patrol(camera_id: str):
+    if camera_id != "CAM 01":
+        return jsonify({"error": "Auto Patrol is only available on CAM 01"}), 409
+    enabled = (request.get_json(silent=True) or {}).get("enabled")
+    if not isinstance(enabled, bool):
+        return jsonify({"error": "enabled must be a boolean"}), 400
+    try:
+        result = _ptz().start_patrol() if enabled else _ptz().stop_patrol()
+        return jsonify(result)
+    except PtzError as error:
+        return jsonify({"error": str(error)}), 409
+
+
 @cameras_blueprint.put("/api/cameras/<path:camera_id>/power")
 def camera_power(camera_id: str):
     payload = request.get_json(silent=True) or {}
@@ -88,6 +102,8 @@ def camera_power(camera_id: str):
             camera = _manager().start_camera(camera_id)
             detection_manager.apply_settings(camera_id)
         else:
+            if camera_id == "CAM 01":
+                _ptz().stop_patrol()
             detection_manager.stop_camera(camera_id)
             camera = _manager().stop_camera(camera_id)
     except KeyError:

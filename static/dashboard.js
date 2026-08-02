@@ -49,6 +49,8 @@
     const all = (selector) => Array.from(document.querySelectorAll(selector));
     const selectedCameraId = () => CAMERA_IDS[state.selectedSlot];
     const selectedCamera = () => state.cameras[selectedCameraId()] || null;
+    const activePreset = (cameraId = selectedCameraId()) =>
+        state.controls[cameraId]?.current_preset || "HOME";
     const restrictedSettings = (cameraId = selectedCameraId()) =>
         state.restrictedZone[cameraId]?.settings || {
             enabled: false,
@@ -443,9 +445,10 @@
     async function refreshRestrictedZone(cameraId = selectedCameraId()) {
         try {
             const encoded = encodeURIComponent(cameraId);
+            const preset = encodeURIComponent(activePreset(cameraId));
             const [settings, zone, detectorStatus, proximity, proximityStatus, ppe, ppeStatus] = await Promise.all([
                 getJson(`/api/cameras/${encoded}/detectors/restricted-zone`),
-                getJson(`/api/cameras/${encoded}/restricted-zone?preset=HOME`),
+                getJson(`/api/cameras/${encoded}/restricted-zone?preset=${preset}`),
                 getJson(`/api/cameras/${encoded}/detectors/restricted-zone/status`),
                 getJson(`/api/cameras/${encoded}/detectors/unsafe-proximity`),
                 getJson(`/api/cameras/${encoded}/detectors/unsafe-proximity/status`),
@@ -492,8 +495,8 @@
             setText(
                 "restricted-zone-summary",
                 current.zone.points.length
-                    ? `HOME preset • ${current.zone.points.length} polygon points`
-                    : "No polygon configured for HOME preset"
+                    ? `${activePreset(cameraId)} preset • ${current.zone.points.length} polygon points`
+                    : `No polygon configured for ${activePreset(cameraId)} preset`
             );
         } catch (error) {
             setText("restricted-zone-summary", error.message);
@@ -596,7 +599,7 @@
         const ready = state.zonePoints.length >= 3;
         byId("zone-save-btn").disabled = !ready;
         setText("zone-editor-status", ready
-            ? `${state.zonePoints.length} points ready to save for HOME preset.`
+            ? `${state.zonePoints.length} points ready to save for ${byId("zone-editor-modal")?.dataset.preset || "HOME"} preset.`
             : `${state.zonePoints.length} point(s) — at least 3 are required.`);
     }
 
@@ -624,12 +627,18 @@
 
     async function openZoneEditor() {
         const cameraId = selectedCameraId();
+        const preset = activePreset(cameraId);
+        if (state.controls[cameraId]?.moving) {
+            window.alert("Wait for Auto Patrol to finish moving before editing this position.");
+            return;
+        }
         try {
             await refreshRestrictedZone(cameraId);
             state.zonePoints = structuredClone(state.restrictedZone[cameraId].zone.points || []);
             const modal = byId("zone-editor-modal");
             const feed = byId("zone-editor-feed");
             modal.dataset.cameraId = cameraId;
+            modal.dataset.preset = preset;
             modal.classList.remove("hidden");
             modal.classList.add("flex");
             feed.classList.remove("opacity-0");
@@ -666,11 +675,12 @@
 
     async function saveZone() {
         const cameraId = byId("zone-editor-modal")?.dataset.cameraId || selectedCameraId();
+        const preset = byId("zone-editor-modal")?.dataset.preset || activePreset(cameraId);
         const button = byId("zone-save-btn");
         button.disabled = true;
         try {
             const zone = await getJson(
-                `/api/cameras/${encodeURIComponent(cameraId)}/restricted-zone?preset=HOME`,
+                `/api/cameras/${encodeURIComponent(cameraId)}/restricted-zone?preset=${encodeURIComponent(preset)}`,
                 {
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },
@@ -679,7 +689,7 @@
             );
             const current = state.restrictedZone[cameraId] || { settings: restrictedSettings(cameraId) };
             state.restrictedZone[cameraId] = { ...current, zone };
-            setText("restricted-zone-summary", `HOME preset • ${zone.points.length} polygon points`);
+            setText("restricted-zone-summary", `${preset} preset • ${zone.points.length} polygon points`);
             closeZoneEditor();
         } catch (error) {
             window.alert(`Could not save the restricted area.\n\n${error.message}`);
@@ -727,14 +737,15 @@
         setControlDisabled(byId("zoom-in"), !zoomAvailable || zoom >= (capability.max_zoom || 3),
             cameraOn ? "Zoom in" : "Turn the camera on first");
 
-        const ptzAvailable = Boolean(capability.pan_tilt && capability.configured && cameraOn && !state.controlBusy);
+        const patrolActive = Boolean(capability.patrol_active);
+        const ptzAvailable = Boolean(capability.pan_tilt && capability.configured && cameraOn && !state.controlBusy && !patrolActive);
         all(".ptz-control").forEach((button) => setControlDisabled(
             button,
             !ptzAvailable,
             cameraId === "CAM 02" ? "CAM 02 supports zoom only" :
                 (!capability.configured ? "Start CAM 01 with scripts/setup_tapo.ps1" : "Move Tapo camera")
         ));
-        const presetAvailable = Boolean(capability.presets && capability.configured && cameraOn && !state.controlBusy);
+        const presetAvailable = Boolean(capability.presets && capability.configured && cameraOn && !state.controlBusy && !patrolActive);
         all(".preset-btn").forEach((button) => {
             setControlDisabled(button, !presetAvailable,
                 cameraId === "CAM 02" ? "Presets are only available on CAM 01" : "Open saved position");
@@ -746,13 +757,27 @@
             "Save the current Tapo direction into P1, P2, or P3");
         byId("save-preset-mode")?.classList.toggle("bg-primary/20", state.presetSaveMode);
         byId("save-preset-mode")?.classList.toggle("text-primary", state.presetSaveMode);
-        setControlDisabled(byId("patrol-toggle"), true, "Auto Patrol will be added after manual PTZ validation");
+        const savedCount = Object.values(state.presets[cameraId] || {}).filter(Boolean).length;
+        const patrolAvailable = Boolean(capability.auto_patrol && capability.configured && cameraOn && savedCount >= 2 && !state.controlBusy);
+        const patrolToggle = byId("patrol-toggle");
+        setControlDisabled(patrolToggle, !patrolAvailable,
+            cameraId === "CAM 02" ? "Auto Patrol is only available on CAM 01" :
+                savedCount < 2 ? "Save at least two Tapo presets first" : "Start or stop Auto Patrol");
+        patrolToggle?.classList.toggle("bg-primary", patrolActive);
+        patrolToggle?.classList.toggle("bg-surface-variant", !patrolActive);
+        patrolToggle?.classList.toggle("shadow-[0_0_8px_rgba(124,158,255,0.3)]", patrolActive);
+        byId("patrol-dot")?.classList.toggle("ml-auto", patrolActive);
+        byId("patrol-dot")?.classList.toggle("mr-auto", !patrolActive);
         byId("joystick-container")?.classList.toggle("opacity-40", !ptzAvailable);
         setText("camera-control-status",
             cameraId === "CAM 02"
                 ? "CAM 02: digital zoom only."
                 : !capability.configured
                     ? "CAM 01: start with setup_tapo.ps1 to enable pan, tilt and presets."
+                    : capability.moving
+                        ? `Moving to the next preset — AI voting paused for ${capability.patrol_settle_seconds || 2}s.`
+                    : patrolActive
+                        ? `Auto Patrol active • ${capability.current_preset} • ${capability.patrol_dwell_seconds || 10}s per position.`
                     : state.presetSaveMode
                         ? "Save mode: choose P1, P2 or P3."
                         : "CAM 01: digital zoom + physical pan/tilt. Presets with a blue border are saved."
@@ -811,16 +836,39 @@
         state.controlBusy = true;
         updateCameraControls();
         try {
-            await getJson(`/api/cameras/${encodeURIComponent(selectedCameraId())}/presets/${slot}`, {
+            const result = await getJson(`/api/cameras/${encodeURIComponent(selectedCameraId())}/presets/${slot}`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action }),
             });
             if (action === "save") {
                 state.presets[selectedCameraId()] = { ...(state.presets[selectedCameraId()] || {}), [slot]: true };
                 state.presetSaveMode = false;
+            } else {
+                state.controls[selectedCameraId()] = {
+                    ...state.controls[selectedCameraId()], current_preset: result.preset || slot,
+                };
+                await refreshRestrictedZone(selectedCameraId());
             }
         } catch (error) {
             window.alert(`Tapo preset failed.\n\n${error.message}`);
+        } finally {
+            state.controlBusy = false;
+            updateCameraControls();
+        }
+    }
+
+    async function togglePatrol() {
+        const cameraId = selectedCameraId();
+        const enabled = !Boolean(state.controls[cameraId]?.patrol_active);
+        state.controlBusy = true;
+        updateCameraControls();
+        try {
+            state.controls[cameraId] = await getJson(`/api/cameras/${encodeURIComponent(cameraId)}/patrol`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ enabled }),
+            });
+        } catch (error) {
+            window.alert(`Auto Patrol failed.\n\n${error.message}`);
         } finally {
             state.controlBusy = false;
             updateCameraControls();
@@ -859,6 +907,7 @@
         byId("recent-events-refresh")?.addEventListener("click", manualRefreshIncidents);
         byId("zoom-in")?.addEventListener("click", () => changeZoom(0.25));
         byId("zoom-out")?.addEventListener("click", () => changeZoom(-0.25));
+        byId("patrol-toggle")?.addEventListener("click", togglePatrol);
         all(".ptz-control").forEach((button) => {
             button.addEventListener("click", () => runPtz(button.dataset.dir));
         });
@@ -920,6 +969,13 @@
         refreshAlarm();
         refreshIncidents();
         window.setInterval(refreshCameras, 2000);
+        window.setInterval(async () => {
+            const cameraId = selectedCameraId();
+            try {
+                state.controls[cameraId] = await getJson(`/api/cameras/${encodeURIComponent(cameraId)}/controls`);
+                updateCameraControls();
+            } catch (_error) { /* main camera refresh displays connection errors */ }
+        }, 2000);
         window.setInterval(refreshModels, 30000);
         window.setInterval(refreshAlarm, 2000);
         window.setInterval(refreshIncidents, 5000);

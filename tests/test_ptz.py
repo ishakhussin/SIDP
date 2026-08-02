@@ -90,6 +90,11 @@ class PtzControllerTest(unittest.TestCase):
         with self.assertRaisesRegex(PtzError, "P2 is empty"):
             self.controller.goto_preset("P2")
 
+    def test_patrol_requires_two_saved_presets(self):
+        self.controller.save_preset("P1")
+        with self.assertRaisesRegex(PtzError, "at least two saved presets"):
+            self.controller.start_patrol()
+
 
 class PtzApiTest(unittest.TestCase):
     def test_cam02_controls_report_zoom_only(self):
@@ -110,6 +115,20 @@ class PtzApiTest(unittest.TestCase):
         response = app.test_client().post("/api/cameras/CAM%2001/ptz", json={"action": "left"})
         self.assertEqual(response.status_code, 200)
         controller.move.assert_called_once_with("left")
+
+    def test_cam01_patrol_routes_to_controller(self):
+        from sentrylab import create_app
+
+        app = create_app()
+        controller = Mock()
+        controller.start_patrol.return_value = {"patrol_active": True}
+        app.extensions["ptz_controller"] = controller
+        response = app.test_client().post(
+            "/api/cameras/CAM%2001/patrol", json={"enabled": True}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["patrol_active"])
+        controller.start_patrol.assert_called_once_with()
 
 
 if __name__ == "__main__":

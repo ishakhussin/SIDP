@@ -150,6 +150,11 @@ TP-Link's official instructions are available in [How to View Tapo Camera Using 
 - To calibrate a Tapo preset, move CAM 01 to the required position, click
   **Save Current**, then click **P1**, **P2**, or **P3**. A normal preset click
   moves the camera back to that saved position.
+- **Auto Patrol** becomes available after at least two presets are saved. CAM 01
+  cycles through the saved positions, waits 2 seconds for the image to settle,
+  then monitors that position for 10 seconds. AI voting is paused during movement.
+- Restricted Zone polygons are calibrated per position. Open P1, P2, or P3,
+  then use **Edit Restricted Zone** to draw the polygon for that position.
 
 CAM 01 controls use the same temporary Camera Account credentials collected by
 `scripts/setup_tapo.ps1`; credentials are not stored in the project. Install

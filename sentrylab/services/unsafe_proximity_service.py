@@ -27,6 +27,7 @@ class UnsafeProximityService:
         depth_interval_seconds: float = 2.0,
         vote_interval_seconds: float = 1.0,
         result_ttl_seconds: float = 5.0,
+        monitoring_ready_provider=lambda: True,
     ) -> None:
         self.camera_id = camera_id
         self.camera_worker = camera_worker
@@ -40,6 +41,7 @@ class UnsafeProximityService:
         self.depth_interval_seconds = float(depth_interval_seconds)
         self.vote_interval_seconds = float(vote_interval_seconds)
         self.result_ttl_seconds = float(result_ttl_seconds)
+        self.monitoring_ready_provider = monitoring_ready_provider
 
         self._lock = threading.Lock()
         self._process_lock = threading.Lock()
@@ -59,6 +61,7 @@ class UnsafeProximityService:
         self._last_error = None
         self._last_processed_at = None
         self._last_depth_ms = None
+        self._monitoring_paused = False
 
     def start(self) -> None:
         with self._start_lock:
@@ -117,6 +120,12 @@ class UnsafeProximityService:
         )
         if not settings["enabled"]:
             return False
+        if not self.monitoring_ready_provider():
+            if not self._monitoring_paused:
+                self.close_active("camera moving")
+                self._monitoring_paused = True
+            return False
+        self._monitoring_paused = False
         latest = self.camera_worker.get_latest_frame(copy=True)
         if latest is None or latest.sequence == self._last_sequence:
             return False
@@ -253,6 +262,7 @@ class UnsafeProximityService:
                 "last_depth_ms": self._last_depth_ms,
                 "last_processed_at": self._last_processed_at,
                 "last_error": self._last_error,
+                "monitoring_paused": self._monitoring_paused,
             }
         status.update(self.evidence_recorder.status())
         return status

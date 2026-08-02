@@ -24,6 +24,7 @@ class RestrictedZoneService:
         incident_repository,
         evidence_recorder,
         preset_provider=lambda: "HOME",
+        monitoring_ready_provider=lambda: True,
         process_interval_seconds: float = 0.18,
     ) -> None:
         self.camera_id = camera_id
@@ -34,6 +35,7 @@ class RestrictedZoneService:
         self.processor = RestrictedZoneProcessor(incident_repository)
         self.evidence_recorder = evidence_recorder
         self.preset_provider = preset_provider
+        self.monitoring_ready_provider = monitoring_ready_provider
         self.process_interval_seconds = float(process_interval_seconds)
 
         self._lock = threading.Lock()
@@ -48,6 +50,7 @@ class RestrictedZoneService:
         self._zone = None
         self._last_error = None
         self._last_processed_at = None
+        self._monitoring_paused = False
 
     def start(self) -> None:
         with self._start_lock:
@@ -73,6 +76,12 @@ class RestrictedZoneService:
         )
         if not settings["enabled"]:
             return False
+        if not self.monitoring_ready_provider():
+            if not self._monitoring_paused:
+                self.close_active("camera moving")
+                self._monitoring_paused = True
+            return False
+        self._monitoring_paused = False
 
         preset = self.preset_provider()
         zone = self.zone_repository.get(self.camera_id, preset)
@@ -175,6 +184,8 @@ class RestrictedZoneService:
                 },
                 "last_processed_at": self._last_processed_at,
                 "last_error": self._last_error,
+                "monitoring_paused": self._monitoring_paused,
+                "preset_name": self.preset_provider(),
             }
         status.update(self.evidence_recorder.status())
         return status

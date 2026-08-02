@@ -54,6 +54,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         incident_repository=app.extensions["incident_repository"],
         model_dir=selected.model_dir,
         clips_dir=selected.clips_dir,
+        ptz_controller=app.extensions["ptz_controller"],
     )
     app.extensions["monitoring_heartbeat"] = MonitoringHeartbeatService(
         camera_manager=app.extensions["camera_manager"],

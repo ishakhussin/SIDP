@@ -32,6 +32,7 @@ class DetectionManager:
         incident_repository,
         model_dir,
         clips_dir,
+        ptz_controller=None,
     ) -> None:
         self.camera_manager = camera_manager
         self.zone_repository = zone_repository
@@ -39,6 +40,7 @@ class DetectionManager:
         self.incident_repository = incident_repository
         self.model_dir = model_dir
         self.clips_dir = clips_dir
+        self.ptz_controller = ptz_controller
         self._services = {}
         self._render_errors = {}
         self._lock = threading.RLock()
@@ -110,6 +112,8 @@ class DetectionManager:
                 settings_repository=self.settings_repository,
                 incident_repository=self.incident_repository,
                 evidence_recorder=recorder,
+                preset_provider=lambda camera_id=camera_id: self._preset_name(camera_id),
+                monitoring_ready_provider=lambda camera_id=camera_id: self._monitoring_ready(camera_id),
             )
             self._services[key] = service
             service.start()
@@ -153,6 +157,7 @@ class DetectionManager:
                 settings_repository=self.settings_repository,
                 incident_repository=self.incident_repository,
                 evidence_recorder=recorder,
+                monitoring_ready_provider=lambda camera_id=camera_id: self._monitoring_ready(camera_id),
             )
             self._services[key] = service
             service.start()
@@ -185,10 +190,19 @@ class DetectionManager:
             service = PPEComplianceService(
                 camera_id, worker, detector, self.settings_repository,
                 self.incident_repository, recorder,
+                monitoring_ready_provider=lambda camera_id=camera_id: self._monitoring_ready(camera_id),
             )
             self._services[key] = service
             service.start()
             return service
+
+    def _monitoring_ready(self, camera_id: str) -> bool:
+        return self.ptz_controller is None or self.ptz_controller.monitoring_ready(camera_id)
+
+    def _preset_name(self, camera_id: str) -> str:
+        if self.ptz_controller is not None and camera_id == self.ptz_controller.CAMERA_ID:
+            return self.ptz_controller.current_preset
+        return "HOME"
 
     def render(self, camera_id: str, frame):
         with self._lock:

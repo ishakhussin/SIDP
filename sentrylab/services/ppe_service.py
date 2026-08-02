@@ -15,7 +15,8 @@ LOGGER = logging.getLogger(__name__)
 
 class PPEComplianceService:
     def __init__(self, camera_id, camera_worker, detector, settings_repository,
-                 incident_repository, evidence_recorder, process_interval_seconds=0.30):
+                 incident_repository, evidence_recorder, process_interval_seconds=0.30,
+                 monitoring_ready_provider=lambda: True):
         self.camera_id = camera_id
         self.camera_worker = camera_worker
         self.detector = detector
@@ -23,6 +24,7 @@ class PPEComplianceService:
         self.processor = IncidentVoteProcessor(incident_repository)
         self.evidence_recorder = evidence_recorder
         self.process_interval_seconds = float(process_interval_seconds)
+        self.monitoring_ready_provider = monitoring_ready_provider
         self._lock = threading.Lock()
         self._process_lock = threading.Lock()
         self._start_lock = threading.Lock()
@@ -34,6 +36,7 @@ class PPEComplianceService:
         self._confirmed_levels = {}
         self._last_error = None
         self._last_processed_at = None
+        self._monitoring_paused = False
 
     def start(self):
         with self._start_lock:
@@ -53,6 +56,12 @@ class PPEComplianceService:
         settings = self.settings_repository.get(self.camera_id, PPE_COMPLIANCE_DETECTOR)
         if not settings["enabled"]:
             return False
+        if not self.monitoring_ready_provider():
+            if not self._monitoring_paused:
+                self.close_active("camera moving")
+                self._monitoring_paused = True
+            return False
+        self._monitoring_paused = False
         latest = self.camera_worker.get_latest_frame(copy=True)
         if latest is None or latest.sequence == self._last_sequence:
             return False
@@ -111,6 +120,7 @@ class PPEComplianceService:
                 "violation_count": sum(bool(item.missing_items) for item in self._detections),
                 "levels": {key: value.value for key, value in self._confirmed_levels.items()},
                 "last_processed_at": self._last_processed_at, "last_error": self._last_error,
+                "monitoring_paused": self._monitoring_paused,
             }
         status.update(self.evidence_recorder.status())
         return status

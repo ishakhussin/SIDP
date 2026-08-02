@@ -24,6 +24,8 @@ class TapoPtzController:
         move_seconds: float = 0.35,
         camera_factory=None,
         sleep=time.sleep,
+        patrol_dwell_seconds: float = 10.0,
+        patrol_settle_seconds: float = 2.0,
     ) -> None:
         self.rtsp_url_env = rtsp_url_env
         self.onvif_port = int(onvif_port)
@@ -36,6 +38,14 @@ class TapoPtzController:
         self._profile_token = None
         self._credential_values: tuple[str, ...] = ()
         self.last_error: str | None = None
+        self.patrol_dwell_seconds = max(5.0, float(patrol_dwell_seconds))
+        self.patrol_settle_seconds = max(0.0, float(patrol_settle_seconds))
+        self._patrol_lock = threading.RLock()
+        self._patrol_stop = threading.Event()
+        self._patrol_thread = None
+        self._patrol_active = False
+        self._moving = False
+        self._current_preset = "HOME"
 
     def capabilities(self, camera_id: str) -> dict:
         is_tapo = camera_id == self.CAMERA_ID
@@ -47,10 +57,34 @@ class TapoPtzController:
             "zoom_step": 0.25,
             "pan_tilt": is_tapo,
             "presets": is_tapo,
+            "auto_patrol": is_tapo,
             "preset_slots": list(self.PRESET_NAMES) if is_tapo else [],
             "configured": bool(os.getenv(self.rtsp_url_env)) if is_tapo else True,
             "last_error": self.last_error if is_tapo else None,
+            "patrol_active": self.patrol_active if is_tapo else False,
+            "moving": self.moving if is_tapo else False,
+            "current_preset": self.current_preset if is_tapo else "HOME",
+            "patrol_dwell_seconds": self.patrol_dwell_seconds,
+            "patrol_settle_seconds": self.patrol_settle_seconds,
         }
+
+    @property
+    def patrol_active(self) -> bool:
+        with self._patrol_lock:
+            return self._patrol_active
+
+    @property
+    def moving(self) -> bool:
+        with self._patrol_lock:
+            return self._moving
+
+    @property
+    def current_preset(self) -> str:
+        with self._patrol_lock:
+            return self._current_preset
+
+    def monitoring_ready(self, camera_id: str) -> bool:
+        return camera_id != self.CAMERA_ID or not self.moving
 
     def _credentials(self) -> tuple[str, str, str]:
         value = os.getenv(self.rtsp_url_env, "")
@@ -102,6 +136,7 @@ class TapoPtzController:
         return service, request
 
     def move(self, direction: str) -> dict:
+        self.stop_patrol()
         vectors = {
             "left": (-self.speed, 0.0), "right": (self.speed, 0.0),
             "up": (0.0, self.speed), "down": (0.0, -self.speed),
@@ -135,15 +170,24 @@ class TapoPtzController:
         service.Stop(request)
 
     def home(self) -> dict:
+        self.stop_patrol()
+        with self._patrol_lock:
+            self._moving = True
         with self._lock:
             try:
                 service, request = self._request("GotoHomePosition")
                 service.GotoHomePosition(request)
+                self._sleep(self.patrol_settle_seconds)
+                with self._patrol_lock:
+                    self._current_preset = "HOME"
                 self.last_error = None
                 return {"ok": True, "position": "HOME"}
             except Exception as error:
                 self._service = None
                 raise self._safe_error(error) from error
+            finally:
+                with self._patrol_lock:
+                    self._moving = False
 
     @staticmethod
     def _value(item, name: str):
@@ -166,6 +210,7 @@ class TapoPtzController:
                 raise self._safe_error(error) from error
 
     def save_preset(self, slot: str) -> dict:
+        self.stop_patrol()
         slot = str(slot).upper()
         if slot not in self.PRESET_NAMES:
             raise PtzError("preset must be P1, P2, or P3")
@@ -185,9 +230,16 @@ class TapoPtzController:
                 raise self._safe_error(error) from error
 
     def goto_preset(self, slot: str) -> dict:
+        self.stop_patrol()
+        self._patrol_stop.clear()
+        return self._goto_preset(slot, cancelable=False)
+
+    def _goto_preset(self, slot: str, cancelable: bool = True) -> dict:
         slot = str(slot).upper()
         if slot not in self.PRESET_NAMES:
             raise PtzError("preset must be P1, P2, or P3")
+        with self._patrol_lock:
+            self._moving = True
         with self._lock:
             try:
                 service, request = self._request("GotoPreset")
@@ -197,6 +249,13 @@ class TapoPtzController:
                     raise PtzError(f"{slot} is empty. Choose Save Current, then {slot}.")
                 request.PresetToken = self._value(preset, "token") or self._value(preset, "PresetToken")
                 service.GotoPreset(request)
+                cancelled = self._patrol_stop.wait(self.patrol_settle_seconds) if cancelable else False
+                if not cancelable:
+                    self._sleep(self.patrol_settle_seconds)
+                if cancelled:
+                    return {"ok": True, "preset": slot, "cancelled": True}
+                with self._patrol_lock:
+                    self._current_preset = slot
                 self.last_error = None
                 return {"ok": True, "preset": slot}
             except PtzError:
@@ -204,3 +263,52 @@ class TapoPtzController:
             except Exception as error:
                 self._service = None
                 raise self._safe_error(error) from error
+            finally:
+                with self._patrol_lock:
+                    self._moving = False
+
+    def start_patrol(self) -> dict:
+        saved = self.preset_status()
+        slots = [slot for slot in self.PRESET_NAMES if saved.get(slot)]
+        if len(slots) < 2:
+            raise PtzError("Auto Patrol needs at least two saved presets (P1, P2 or P3).")
+        with self._patrol_lock:
+            if self._patrol_thread is not None and self._patrol_thread.is_alive():
+                return self.capabilities(self.CAMERA_ID)
+            self._patrol_stop.clear()
+            self._patrol_active = True
+            self._patrol_thread = threading.Thread(
+                target=self._patrol_loop,
+                args=(slots,),
+                daemon=True,
+                name="tapo-auto-patrol",
+            )
+            self._patrol_thread.start()
+        return self.capabilities(self.CAMERA_ID)
+
+    def _patrol_loop(self, slots: list[str]) -> None:
+        try:
+            while not self._patrol_stop.is_set():
+                for slot in slots:
+                    if self._patrol_stop.is_set():
+                        break
+                    self._goto_preset(slot)
+                    if self._patrol_stop.wait(self.patrol_dwell_seconds):
+                        break
+        except Exception as error:
+            self.last_error = str(error)
+        finally:
+            with self._patrol_lock:
+                self._patrol_active = False
+                self._moving = False
+
+    def stop_patrol(self) -> dict:
+        self._patrol_stop.set()
+        with self._patrol_lock:
+            thread = self._patrol_thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(3.0)
+        with self._patrol_lock:
+            self._patrol_active = False
+            self._moving = False
+        return self.capabilities(self.CAMERA_ID)

@@ -30,9 +30,17 @@ bool connectPlayer() {
     return false;
   }
   player.volume(ALARM_VOLUME);
+  delay(250);
+  const int fileCount = player.readFileCounts();
+  if (fileCount <= 0) {
+    playerReady = false;
+    Serial.print("AUDIO:SD_ERROR:FILES=");
+    Serial.println(fileCount);
+    return false;
+  }
   playerReady = true;
   Serial.print("AUDIO:ONLINE:FILES=");
-  Serial.println(player.readFileCounts());
+  Serial.println(fileCount);
   return true;
 }
 
@@ -76,8 +84,11 @@ void handleCommand(String command) {
     return;
   }
   if (command == "STATUS") {
+    const int fileCount = player.readFileCounts();
     Serial.print("STATUS:PLAYER=");
     Serial.print(playerReady ? "ONLINE" : "OFFLINE");
+    Serial.print(":FILES=");
+    Serial.print(fileCount);
     Serial.print(":ALARM=");
     Serial.println(alarmPlaying ? "ON" : "OFF");
     return;

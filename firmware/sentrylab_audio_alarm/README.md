@@ -19,6 +19,16 @@ Format the card as FAT32 and copy `0001.mp3` as the first and only track during 
 
 ## Upload
 
+### Visual Studio Code with PlatformIO
+
+1. Install the PlatformIO IDE extension.
+2. Open this `firmware/sentrylab_audio_alarm` folder as the VS Code workspace.
+3. PlatformIO reads `platformio.ini` and installs ESP32 support plus `DFRobotDFPlayerMini` automatically.
+4. Select the detected ESP32 COM port and choose **Upload**.
+5. Close the serial monitor before starting SentryLab.
+
+### Arduino IDE
+
 1. Install ESP32 board support in Arduino IDE.
 2. Install the `DFRobotDFPlayerMini` library.
 3. Open `sentrylab_audio_alarm.ino`.
@@ -35,3 +45,5 @@ STATUS
 ```
 
 If laptop commands stop for five seconds, the ESP32 stops the alarm rather than sounding indefinitely.
+
+At boot, `AUDIO:ONLINE:FILES=1` confirms that the DFPlayer can read the card. `AUDIO:SD_ERROR:FILES=0` or a negative file count means the card is empty, unreadable, incorrectly formatted, or not seated correctly. The firmware will not claim that audio is online in this state.

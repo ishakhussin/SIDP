@@ -63,22 +63,25 @@ class CameraWorker:
             )
             self._thread.start()
 
-    def stop(self, timeout: float = 2.0) -> None:
+    def stop(self, timeout: float = 3.0) -> None:
         with self._start_lock:
             self._stop_event.set()
             thread = self._thread
-        with self._capture_lock:
-            capture = self._active_capture
-        if capture is not None:
-            try:
-                capture.release()
-            except Exception:
-                LOGGER.debug("%s capture release during stop failed", self.camera_id)
+        # Do not release _active_capture here. The capture thread may currently
+        # be inside FFmpeg/OpenCV read(), and cross-thread release can crash the
+        # interpreter. Network captures have a bounded read timeout and release
+        # themselves in _run's finally block.
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=max(0.0, timeout))
         with self._start_lock:
             if self._thread is not None and not self._thread.is_alive():
                 self._thread = None
+            elif self._thread is not None:
+                self._set_state(
+                    CameraState.ERROR,
+                    "Camera shutdown timed out; wait briefly before restarting",
+                )
+                return
         with self._frame_lock:
             self._latest = None
             self._frame_times.clear()

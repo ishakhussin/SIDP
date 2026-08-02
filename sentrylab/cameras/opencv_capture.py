@@ -22,11 +22,26 @@ class OpenCVCapture:
             "msmf": getattr(cv2, "CAP_MSMF", 0),
         }
         backend_id = backend_ids.get(str(backend or "").lower())
-        self._capture = (
-            cv2.VideoCapture(source, backend_id)
-            if backend_id
-            else cv2.VideoCapture(source)
-        )
+        is_rtsp = isinstance(source, str) and source.lower().startswith("rtsp://")
+        if is_rtsp:
+            # A bounded read lets CameraWorker stop cooperatively. Calling
+            # VideoCapture.release() from a second thread while FFmpeg is in
+            # read() can terminate the whole Python process on Windows.
+            parameters = [
+                cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000,
+                cv2.CAP_PROP_READ_TIMEOUT_MSEC, 1500,
+            ]
+            self._capture = cv2.VideoCapture(
+                source,
+                getattr(cv2, "CAP_FFMPEG", 0),
+                parameters,
+            )
+        else:
+            self._capture = (
+                cv2.VideoCapture(source, backend_id)
+                if backend_id
+                else cv2.VideoCapture(source)
+            )
         if codec and len(codec) == 4:
             self._capture.set(
                 cv2.CAP_PROP_FOURCC,

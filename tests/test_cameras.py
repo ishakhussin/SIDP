@@ -2,6 +2,7 @@ import time
 import json
 import tempfile
 import unittest
+import threading
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -142,6 +143,33 @@ class CameraWorkerTest(unittest.TestCase):
         self.assertIsNone(worker.get_latest_frame())
         self.assertEqual(worker.status()["state"], CameraState.STOPPED)
         self.assertFalse(worker.status()["power_on"])
+
+    def test_stop_never_releases_capture_from_request_thread(self):
+        class SlowCapture:
+            def __init__(self):
+                self.read_started = threading.Event()
+                self.release_threads = []
+
+            def is_opened(self):
+                return True
+
+            def read(self):
+                self.read_started.set()
+                time.sleep(0.05)
+                return True, FakeFrame("network")
+
+            def release(self):
+                self.release_threads.append(threading.current_thread().name)
+
+        capture = SlowCapture()
+        worker = CameraWorker(self.definition, lambda _definition: capture)
+        worker.start()
+        self.assertTrue(capture.read_started.wait(0.5))
+
+        worker.stop()
+
+        self.assertEqual(capture.release_threads, ["camera-cam-02"])
+        self.assertEqual(worker.status()["state"], CameraState.STOPPED)
 
     def test_disabled_camera_does_not_create_worker(self):
         disabled = CameraDefinition(

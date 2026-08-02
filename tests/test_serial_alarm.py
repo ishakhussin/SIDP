@@ -113,12 +113,30 @@ class SerialAlarmTest(unittest.TestCase):
         self.assertTrue(service.status()["connected"])
         self.assertEqual(self.serial.commands, ["HEARTBEAT"])
 
-    def test_alarm_status_api_is_available_without_a_com_port(self):
+    def test_alarm_status_api_enables_safe_auto_detection_without_a_com_port(self):
         from sentrylab import create_app
 
         response = create_app().test_client().get("/api/alarm/status")
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.get_json()["configured"])
+        self.assertTrue(response.get_json()["configured"])
+        self.assertTrue(response.get_json()["auto_detect"])
+
+    def test_auto_detection_connects_to_the_single_ch340_port(self):
+        service = SerialAlarmService(
+            StubCameraManager(),
+            self.detection,
+            port=None,
+            serial_factory=lambda port, _baud: self.serial if port == "COM4" else None,
+            port_discovery=lambda: "COM4",
+        )
+
+        service.poll_once(now=0.0)
+
+        status = service.status()
+        self.assertTrue(status["auto_detect"])
+        self.assertEqual(status["port"], "COM4")
+        self.assertTrue(status["connected"])
+        self.assertEqual(self.serial.commands, ["HEARTBEAT"])
 
 
 if __name__ == "__main__":

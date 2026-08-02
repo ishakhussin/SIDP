@@ -23,6 +23,28 @@ def _default_serial_factory(port: str, baud_rate: int):
     )
 
 
+def _discover_esp32_port() -> str | None:
+    """Return one connected CH340 ESP32 port without selecting unrelated devices."""
+    from serial.tools import list_ports
+
+    matches = []
+    for port in list_ports.comports():
+        description = str(port.description or "").upper()
+        is_ch340 = (
+            (port.vid == 0x1A86 and port.pid == 0x7523)
+            or "CH340" in description
+            or "CH341" in description
+        )
+        if is_ch340:
+            matches.append(port.device)
+    matches = sorted(set(matches))
+    if len(matches) > 1:
+        raise RuntimeError(
+            "Multiple CH340 serial devices detected; set SENTRYLAB_ALARM_COM_PORT"
+        )
+    return matches[0] if matches else None
+
+
 class SerialAlarmService:
     """Keeps the alarm on while any confirmed detector level is UNSAFE."""
 
@@ -35,15 +57,19 @@ class SerialAlarmService:
         poll_interval_seconds: float = 1.0,
         clear_delay_seconds: float = 2.0,
         serial_factory=_default_serial_factory,
+        port_discovery=_discover_esp32_port,
         clock=time.monotonic,
     ) -> None:
         self.camera_manager = camera_manager
         self.detection_manager = detection_manager
-        self.port = str(port).strip() if port else None
+        self.requested_port = str(port).strip() if port else None
+        self.port = self.requested_port
+        self.auto_detect = self.requested_port is None
         self.baud_rate = int(baud_rate)
         self.poll_interval_seconds = float(poll_interval_seconds)
         self.clear_delay_seconds = float(clear_delay_seconds)
         self.serial_factory = serial_factory
+        self.port_discovery = port_discovery
         self.clock = clock
         self._serial = None
         self._thread = None
@@ -60,8 +86,6 @@ class SerialAlarmService:
         self._reconnect_count = 0
 
     def start(self) -> None:
-        if not self.port:
-            return
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return
@@ -137,6 +161,10 @@ class SerialAlarmService:
         if self._serial is not None:
             return
         try:
+            if self.port is None:
+                self.port = self.port_discovery()
+            if self.port is None:
+                raise RuntimeError("No connected CH340 ESP32 alarm device detected")
             connection = self.serial_factory(self.port, self.baud_rate)
             with self._lock:
                 self._serial = connection
@@ -160,6 +188,9 @@ class SerialAlarmService:
                 self._last_error = str(error)
                 self._alarm_active = False
             self._close_serial()
+            if self.auto_detect:
+                with self._lock:
+                    self.port = None
             return
         with self._lock:
             self._last_command = command
@@ -192,9 +223,10 @@ class SerialAlarmService:
     def status(self) -> dict:
         with self._lock:
             return {
-                "configured": bool(self.port),
+                "configured": bool(self.requested_port) or self.auto_detect,
                 "connected": self._serial is not None,
                 "port": self.port,
+                "auto_detect": self.auto_detect,
                 "baud_rate": self.baud_rate,
                 "running": self._thread is not None and self._thread.is_alive(),
                 "alarm_required": self._alarm_required,

@@ -157,7 +157,7 @@ Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in a browser. Stop the appli
 
 ## ESP32 audio alarm
 
-Flash the firmware in [`firmware/sentrylab_audio_alarm`](firmware/sentrylab_audio_alarm), connect the ESP32 to the laptop by USB, and close Arduino Serial Monitor. Configure the detected Windows COM port before starting SentryLab:
+Flash the firmware in [`firmware/sentrylab_audio_alarm`](firmware/sentrylab_audio_alarm), connect the ESP32 to the laptop by USB, and close Arduino Serial Monitor. SentryLab automatically selects a single connected CH340 ESP32 device. An explicit port can still override auto-detection:
 
 ```powershell
 $env:SENTRYLAB_ALARM_COM_PORT = "COM5"

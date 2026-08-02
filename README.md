@@ -1,31 +1,126 @@
-# SentryLab v123
+# SentryLab
 
-Clean rebuild of the local laboratory safety monitoring application.
+AI-powered laboratory safety monitoring for restricted-zone entry, unsafe proximity, and personal protective equipment (PPE) compliance.
 
-## Current milestone
+SentryLab is a local Flask application that connects to USB and RTSP cameras, runs multiple safety detectors, displays annotated live feeds, and records evidence for confirmed unsafe incidents. It is designed for a single operator running the system manually on one computer.
 
-- Application factory and thin launcher
-- Central settings and clean camera numbering
-- Health API
-- Shared model-independent detection contract
-- Five-vote WARNING/SAFE confirmation engine
-- One-owner camera workers with latest-frame storage
-- Automatic capture reconnection
-- Camera status APIs that do not start camera connections
-- Raw JPEG snapshots and MJPEG streams from the shared latest-frame slot
-- Restricted Zone pose detection using ankle keypoints and bbox fallback
-- Per-camera HOME/PTZ-preset polygons editable from the dashboard
-- Immediate WARNING and five-second majority-vote UNSAFE confirmation
-- Camera-level incidents with independent per-person state
-- One annotated ten-second MP4 per UNSAFE incident (3s before, 7s after)
-- Inline clip playback, CSV/ZIP export, and manual incident deletion
-- No camera or AI model loads during Flask import
-- Unsafe Proximity using tracked YOLO11 people plus DepthPro metric depth
-- Responsive asynchronous depth inference with persistent 1.5 m pair overlays
-- Independent pair voting with UNKNOWN samples excluded from confirmation
+## Safety monitoring
 
-Run tests with:
+- **Restricted Zone:** detects entry using ankle keypoints and camera-specific polygons.
+- **Unsafe Proximity:** estimates the distance between tracked people and warns below 1.5 metres.
+- **PPE Compliance:** checks each detected person for a lab coat, mask, and gloves.
+- **Majority voting:** shows WARNING immediately, then confirms UNSAFE when at least three valid violation samples are observed within five one-second checks. UNKNOWN samples are excluded.
+- **Incident evidence:** creates one annotated ten-second clip for each UNSAFE incident, covering three seconds before and seven seconds after confirmation.
+- **Monitoring heartbeat:** records a concise SAFE status every five minutes when the system is operating without an incident.
+
+## Dashboard
+
+- Live multi-camera monitoring
+- Independent detector controls for every camera
+- AI overlay toggle without stopping detection
+- Live restricted-zone polygon editor
+- SAFE, WARNING, and UNSAFE status display
+- Event filtering and inline video playback
+- CSV and ZIP export
+- Manual incident deletion
+- Camera status and automatic reconnection
+
+## Architecture
+
+```text
+app.py                         Thin application launcher
+config/                        Camera configuration
+models/                        Local AI model files (not stored in Git)
+sentrylab/
+  api/                         Flask routes and JSON APIs
+  cameras/                     Camera ownership, capture, and reconnection
+  database/                    SQLite schema and repositories
+  detection/                   Restricted-zone, proximity, and PPE models
+  domain/                      Shared detection data contracts
+  services/                    Voting, incidents, evidence, and heartbeats
+  streaming/                   Snapshot and MJPEG streaming
+static/                        Dashboard JavaScript and styles
+templates/                     Dashboard, overview, and event pages
+tests/                         Automated test suite
+```
+
+`app.py` only creates the application, starts the runtime services, and launches Flask. Camera, AI, voting, incident, and recording logic remain in separate modules so that failures are easier to isolate and test.
+
+## Requirements
+
+- Windows 10 or Windows 11
+- Python 3.12 recommended
+- USB camera or RTSP-compatible IP camera
+- NVIDIA CUDA-capable GPU recommended for smooth multi-model inference
+- FFmpeg recommended for browser-compatible H.264 evidence clips
+
+## Installation
+
+Open PowerShell in the project directory:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+## AI models
+
+Model weights are not committed to GitHub because they are large and may have separate licences. Place them in the following layout:
+
+```text
+models/
+  restricted_zone/
+    yolo11n-pose.pt
+  unsafe_proximity/
+    yolo11n.pt
+    config.json
+    preprocessor_config.json
+    model.safetensors
+  ppe/
+    yolov8n.pt
+    ppe_multilabel_best.pt
+```
+
+See [models/README.md](models/README.md) for the expected production layout.
+
+## Camera configuration
+
+Edit `config/cameras.json` to configure USB cameras and enable or disable camera slots.
+
+For CAM 01, provide the RTSP address through an environment variable instead of saving credentials in Git:
+
+```powershell
+$env:SENTRYLAB_CAM01_RTSP_URL = "rtsp://username:password@camera-address/stream"
+```
+
+The included configuration uses:
+
+- CAM 01: Tapo C200 through RTSP
+- CAM 02: eMeet USB camera at 1920 x 1080, 30 FPS, MJPG
+- CAM 03: disabled placeholder for future expansion
+
+## Run SentryLab
+
+```powershell
+python app.py
+```
+
+Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in a browser. Stop the application with `Ctrl+C`.
+
+## Run the tests
 
 ```powershell
 python -m unittest discover -s tests -v
 ```
+
+The current release contains 75 automated tests covering cameras, streaming, voting, detectors, incident recording, dashboard APIs, and monitoring heartbeats.
+
+## Runtime data and privacy
+
+SQLite databases, evidence clips, logs, credentials, and AI weights are intentionally excluded from Git. Runtime files are created under `data/` on the local computer. Review recorded evidence before sharing it because it may contain identifiable people or private laboratory activity.
+
+## Project status
+
+SentryLab v123 is a production-oriented prototype undergoing physical-camera and real-world model validation. It should support laboratory safety personnel rather than replace trained human supervision or formal safety procedures.

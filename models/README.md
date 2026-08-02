@@ -10,4 +10,7 @@ models/
     config.json
     preprocessor_config.json
     model.safetensors
+  ppe/
+    yolov8n.pt
+    ppe_multilabel_best.pt
 ```

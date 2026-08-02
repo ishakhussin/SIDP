@@ -1,6 +1,6 @@
 """Read-only camera status endpoints."""
 
-from flask import Blueprint, Response, current_app, jsonify
+from flask import Blueprint, Response, current_app, jsonify, request
 
 from sentrylab.streaming import encode_jpeg, mjpeg_generator
 
@@ -27,6 +27,26 @@ def camera_status(camera_id: str):
         return jsonify(_manager().status(camera_id))
     except KeyError:
         return jsonify({"error": "Camera not found"}), 404
+
+
+@cameras_blueprint.put("/api/cameras/<path:camera_id>/power")
+def camera_power(camera_id: str):
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload.get("on"), bool):
+        return jsonify({"error": "on must be a boolean"}), 400
+    detection_manager = current_app.extensions["detection_manager"]
+    try:
+        if payload["on"]:
+            camera = _manager().start_camera(camera_id)
+            detection_manager.apply_settings(camera_id)
+        else:
+            detection_manager.stop_camera(camera_id)
+            camera = _manager().stop_camera(camera_id)
+    except KeyError:
+        return jsonify({"error": "Camera not found"}), 404
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 409
+    return jsonify({"power_on": camera["power_on"], "camera": camera})
 
 
 def _stream_worker(camera_id: str):

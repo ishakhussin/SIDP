@@ -33,10 +33,12 @@ class CameraWorker:
 
         self._state_lock = threading.Lock()
         self._frame_lock = threading.Lock()
+        self._capture_lock = threading.Lock()
         self._start_lock = threading.Lock()
         self._stop_event = threading.Event()
 
         self._thread: threading.Thread | None = None
+        self._active_capture: CaptureDevice | None = None
         self._state = CameraState.STOPPED
         self._last_error: str | None = None
         self._latest: LatestFrame | None = None
@@ -53,6 +55,7 @@ class CameraWorker:
             if self._thread is not None and self._thread.is_alive():
                 return
             self._stop_event.clear()
+            self._set_state(CameraState.CONNECTING)
             self._thread = threading.Thread(
                 target=self._run,
                 daemon=True,
@@ -64,8 +67,21 @@ class CameraWorker:
         with self._start_lock:
             self._stop_event.set()
             thread = self._thread
+        with self._capture_lock:
+            capture = self._active_capture
+        if capture is not None:
+            try:
+                capture.release()
+            except Exception:
+                LOGGER.debug("%s capture release during stop failed", self.camera_id)
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=max(0.0, timeout))
+        with self._start_lock:
+            if self._thread is not None and not self._thread.is_alive():
+                self._thread = None
+        with self._frame_lock:
+            self._latest = None
+            self._frame_times.clear()
         self._set_state(CameraState.STOPPED)
 
     def _set_state(self, state: CameraState, error: str | None = None) -> None:
@@ -106,6 +122,11 @@ class CameraWorker:
                 "enabled": self.definition.enabled,
                 "configured": self.definition.is_configured(),
                 "state": self._state.value,
+                "power_on": self._state not in {
+                    CameraState.STOPPED,
+                    CameraState.DISABLED,
+                    CameraState.UNCONFIGURED,
+                },
                 "sequence": latest.sequence if latest else 0,
                 "last_frame_at": latest.captured_at if latest else None,
                 "reconnect_count": self._reconnect_count,
@@ -135,6 +156,8 @@ class CameraWorker:
             capture = None
             try:
                 capture = self._capture_factory(self.definition)
+                with self._capture_lock:
+                    self._active_capture = capture
                 if not capture.is_opened():
                     raise ConnectionError("Camera connection could not be opened")
 
@@ -152,6 +175,9 @@ class CameraWorker:
                     self._reconnect_count += 1
                 self._set_state(CameraState.RECONNECTING, str(error))
             finally:
+                with self._capture_lock:
+                    if self._active_capture is capture:
+                        self._active_capture = None
                 if capture is not None:
                     try:
                         capture.release()

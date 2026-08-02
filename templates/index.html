@@ -448,7 +448,9 @@ NOT SET
 <div class="bg-surface-container rounded-2xl border border-outline-variant flex flex-col h-full max-h-[500px]">
 <div class="p-6 border-b border-outline-variant flex justify-between items-center">
 <h4 class="font-headline-sm text-headline-sm">Recent Events</h4>
-<span class="material-symbols-outlined text-outline">history</span>
+<button aria-label="Refresh recent events" class="p-1 rounded-lg text-outline hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50" id="recent-events-refresh" title="Refresh recent events" type="button">
+<span class="material-symbols-outlined">refresh</span>
+</button>
 </div>
 <div class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar" id="recent-events-list">
 <!-- Rendered dynamically from GET /api/dashboard/summary -->

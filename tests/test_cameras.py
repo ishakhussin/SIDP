@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 from sentrylab.cameras.base import CameraDefinition, CameraState
 from sentrylab.cameras.manager import CameraManager
@@ -129,6 +130,19 @@ class CameraWorkerTest(unittest.TestCase):
             self.assertEqual(definition.codec, "MJPG")
             self.assertEqual(definition.backend, "dshow")
 
+    def test_stop_releases_capture_and_clears_cached_frame(self):
+        capture = FakeCapture([FakeFrame("live")])
+        worker = CameraWorker(self.definition, lambda _definition: capture, 0.5)
+        worker.start()
+        self.assertTrue(wait_until(lambda: worker.get_latest_frame() is not None))
+
+        worker.stop()
+
+        self.assertTrue(capture.released)
+        self.assertIsNone(worker.get_latest_frame())
+        self.assertEqual(worker.status()["state"], CameraState.STOPPED)
+        self.assertFalse(worker.status()["power_on"])
+
     def test_disabled_camera_does_not_create_worker(self):
         disabled = CameraDefinition(
             camera_id="CAM 03",
@@ -153,6 +167,42 @@ class CameraApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.get_json()["cameras"]), 3)
         self.assertEqual(manager._workers, {})
+
+    def test_power_endpoint_controls_camera_and_detector_lifecycle(self):
+        from sentrylab import create_app
+
+        app = create_app()
+        camera_manager = Mock()
+        camera_manager.start_camera.return_value = {
+            "camera_id": "CAM 02", "power_on": True, "state": "CONNECTING"
+        }
+        camera_manager.stop_camera.return_value = {
+            "camera_id": "CAM 02", "power_on": False, "state": "STOPPED"
+        }
+        detection_manager = Mock()
+        app.extensions["camera_manager"] = camera_manager
+        app.extensions["detection_manager"] = detection_manager
+        client = app.test_client()
+
+        powered_on = client.put("/api/cameras/CAM%2002/power", json={"on": True})
+        powered_off = client.put("/api/cameras/CAM%2002/power", json={"on": False})
+
+        self.assertEqual(powered_on.status_code, 200)
+        self.assertTrue(powered_on.get_json()["power_on"])
+        camera_manager.start_camera.assert_called_once_with("CAM 02")
+        detection_manager.apply_settings.assert_called_once_with("CAM 02")
+        self.assertEqual(powered_off.status_code, 200)
+        self.assertFalse(powered_off.get_json()["power_on"])
+        detection_manager.stop_camera.assert_called_once_with("CAM 02")
+        camera_manager.stop_camera.assert_called_once_with("CAM 02")
+
+    def test_power_endpoint_requires_boolean(self):
+        from sentrylab import create_app
+
+        response = create_app().test_client().put(
+            "/api/cameras/CAM%2002/power", json={"on": "yes"}
+        )
+        self.assertEqual(response.status_code, 400)
 
 
 if __name__ == "__main__":

@@ -56,6 +56,9 @@ class DashboardTest(unittest.TestCase):
             self.assertIn(b"/detectors/ppe", response.data)
             self.assertIn(b"/api/models/status", response.data)
             self.assertIn(b"/api/alarm/status", response.data)
+            self.assertIn(b"/power", response.data)
+            self.assertIn(b"localStorage", response.data)
+            self.assertIn(b"recent-events-refresh", response.data)
             self.assertIn(b"MODEL MISSING", response.data)
             self.assertIn(b"capture_fps", response.data)
             self.assertIn(b"/restricted-zone?preset=HOME", response.data)
@@ -67,6 +70,11 @@ class DashboardTest(unittest.TestCase):
             self.assertNotIn(b"/api/camera/tapo", response.data)
         finally:
             response.close()
+
+    def test_recent_events_has_refresh_button(self):
+        response = self.client.get("/")
+        self.assertIn(b'id="recent-events-refresh"', response.data)
+        self.assertIn(b'Refresh recent events', response.data)
 
 
 if __name__ == "__main__":

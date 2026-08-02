@@ -93,6 +93,26 @@ class CameraManager:
         for worker in workers:
             worker.stop()
 
+    def start_camera(self, camera_id: str) -> dict:
+        definition = self._definitions.get(camera_id)
+        if definition is None:
+            raise KeyError(f"Unknown camera: {camera_id}")
+        if not definition.enabled:
+            raise ValueError(f"Camera is disabled: {camera_id}")
+        if not definition.is_configured():
+            raise ValueError(f"Camera source is not configured: {camera_id}")
+        worker = self.get_or_create(camera_id)
+        worker.start()
+        return worker.status()
+
+    def stop_camera(self, camera_id: str) -> dict:
+        if camera_id not in self._definitions:
+            raise KeyError(f"Unknown camera: {camera_id}")
+        worker = self.existing_worker(camera_id)
+        if worker is not None:
+            worker.stop()
+        return self.status(camera_id)
+
     def existing_worker(self, camera_id: str) -> CameraWorker | None:
         if camera_id not in self._definitions:
             raise KeyError(f"Unknown camera: {camera_id}")
@@ -121,6 +141,7 @@ class CameraManager:
                 "enabled": definition.enabled,
                 "configured": definition.is_configured(),
                 "state": state.value,
+                "power_on": False,
                 "sequence": 0,
                 "last_frame_at": None,
                 "reconnect_count": 0,

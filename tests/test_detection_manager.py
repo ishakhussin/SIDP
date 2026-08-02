@@ -21,6 +21,18 @@ class WorkingOverlay:
         return frame + " + working"
 
 
+class StoppableService:
+    def __init__(self):
+        self.close_reason = None
+        self.stopped = False
+
+    def close_active(self, reason):
+        self.close_reason = reason
+
+    def stop(self):
+        self.stopped = True
+
+
 class DetectionManagerIsolationTest(unittest.TestCase):
     def test_one_overlay_failure_does_not_break_later_detectors_or_stream(self):
         manager = DetectionManager(None, None, None, None, None, None)
@@ -36,3 +48,18 @@ class DetectionManagerIsolationTest(unittest.TestCase):
             manager._render_errors[("CAM 02", RESTRICTED_ZONE_DETECTOR)],
             "overlay exploded",
         )
+
+    def test_stop_camera_removes_only_that_cameras_detector_services(self):
+        manager = DetectionManager(None, None, None, None, None, None)
+        cam2 = StoppableService()
+        cam1 = StoppableService()
+        manager._services[("CAM 02", RESTRICTED_ZONE_DETECTOR)] = cam2
+        manager._services[("CAM 01", RESTRICTED_ZONE_DETECTOR)] = cam1
+
+        manager.stop_camera("CAM 02")
+
+        self.assertTrue(cam2.stopped)
+        self.assertEqual(cam2.close_reason, "camera switched off")
+        self.assertNotIn(("CAM 02", RESTRICTED_ZONE_DETECTOR), manager._services)
+        self.assertIn(("CAM 01", RESTRICTED_ZONE_DETECTOR), manager._services)
+        self.assertFalse(cam1.stopped)

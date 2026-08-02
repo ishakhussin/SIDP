@@ -5,8 +5,17 @@
     const SLOT_BY_ID = Object.fromEntries(
         Object.entries(CAMERA_IDS).map(([slot, id]) => [id, slot])
     );
+    const SELECTED_CAMERA_KEY = "sentrylab.selectedCameraSlot";
+    function savedCameraSlot() {
+        try {
+            const slot = window.localStorage.getItem(SELECTED_CAMERA_KEY);
+            return CAMERA_IDS[slot] ? slot : "CAM1";
+        } catch (_error) {
+            return "CAM1";
+        }
+    }
     const state = {
-        selectedSlot: "CAM1",
+        selectedSlot: savedCameraSlot(),
         cameras: {},
         feedEnabled: { CAM1: false, CAM2: false, CAM3: false },
         restrictedZone: {},
@@ -240,7 +249,7 @@
         const button = byId("camera-power-toggle");
         if (button) {
             const camera = selectedCamera();
-            button.disabled = !camera || ["DISABLED", "UNCONFIGURED", "ERROR"].includes(camera.state);
+            button.disabled = !camera || ["DISABLED", "UNCONFIGURED"].includes(camera.state);
             button.classList.toggle("opacity-40", button.disabled);
         }
     }
@@ -248,6 +257,11 @@
     function selectCamera(slot) {
         if (!CAMERA_IDS[slot]) return;
         state.selectedSlot = slot;
+        try {
+            window.localStorage.setItem(SELECTED_CAMERA_KEY, slot);
+        } catch (_error) {
+            // Backend power state still preserves the feed when storage is unavailable.
+        }
         updateSelectorDots();
         updateStatusCard();
         updatePowerButton();
@@ -264,12 +278,22 @@
             const response = await fetch("/api/cameras", { cache: "no-store" });
             if (!response.ok) throw new Error(`Camera status ${response.status}`);
             const payload = await response.json();
+            const previousFeed = state.feedEnabled[state.selectedSlot];
+            const previousCameraState = selectedCamera()?.state;
             state.cameras = Object.fromEntries(
                 payload.cameras.map((camera) => [camera.camera_id, camera])
             );
+            payload.cameras.forEach((camera) => {
+                const slot = SLOT_BY_ID[camera.camera_id];
+                if (slot) state.feedEnabled[slot] = Boolean(camera.power_on);
+            });
             updateSelectorDots();
             updateStatusCard();
             updatePowerButton();
+            if (
+                previousFeed !== state.feedEnabled[state.selectedSlot]
+                || previousCameraState !== selectedCamera()?.state
+            ) showSelectedFeed();
         } catch (error) {
             setText("camera-status-message", `Dashboard connection error: ${error.message}`);
             setText("camera-operating-status", "OFFLINE");
@@ -351,6 +375,46 @@
             renderRecentIncidents(summary.recent_incidents);
         } catch (_error) {
             setText("stat-total-events", "—");
+        }
+    }
+
+    async function manualRefreshIncidents() {
+        const button = byId("recent-events-refresh");
+        const icon = button?.querySelector(".material-symbols-outlined");
+        if (button) button.disabled = true;
+        icon?.classList.add("animate-spin");
+        try {
+            await refreshIncidents();
+        } finally {
+            icon?.classList.remove("animate-spin");
+            if (button) button.disabled = false;
+        }
+    }
+
+    async function setSelectedCameraPower(on) {
+        const cameraId = selectedCameraId();
+        const button = byId("camera-power-toggle");
+        if (button) button.disabled = true;
+        try {
+            const result = await getJson(
+                `/api/cameras/${encodeURIComponent(cameraId)}/power`,
+                {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ on }),
+                }
+            );
+            state.cameras[cameraId] = result.camera;
+            state.feedEnabled[state.selectedSlot] = result.power_on;
+            if (!result.power_on) hideFeeds();
+            updateStatusCard();
+            updatePowerButton();
+            showSelectedFeed();
+            await refreshRestrictedZone(cameraId);
+        } catch (error) {
+            window.alert(`Could not turn ${cameraId} ${on ? "on" : "off"}.\n\n${error.message}`);
+        } finally {
+            updatePowerButton();
         }
     }
 
@@ -636,11 +700,9 @@
             selector.addEventListener("click", () => selectCamera(selector.dataset.cam));
         });
         byId("camera-power-toggle")?.addEventListener("click", () => {
-            state.feedEnabled[state.selectedSlot] = !state.feedEnabled[state.selectedSlot];
-            updatePowerButton();
-            updateStatusCard();
-            showSelectedFeed();
+            setSelectedCameraPower(!state.feedEnabled[state.selectedSlot]);
         });
+        byId("recent-events-refresh")?.addEventListener("click", manualRefreshIncidents);
         byId("fullscreen-toggle")?.addEventListener("click", async () => {
             const container = byId("video-feed-container");
             if (!document.fullscreenElement) await container?.requestFullscreen();
@@ -687,7 +749,7 @@
         disableFutureControls();
         initializePlaceholders();
         renderUseCases();
-        selectCamera("CAM1");
+        selectCamera(state.selectedSlot);
         refreshCameras();
         refreshModels();
         refreshAlarm();

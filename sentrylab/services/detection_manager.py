@@ -267,3 +267,15 @@ class DetectionManager:
         with self._lock:
             self._services.clear()
             self._render_errors.clear()
+
+    def stop_camera(self, camera_id: str, reason: str = "camera switched off") -> None:
+        """Stop and remove every detector runtime for one camera."""
+        with self._lock:
+            keys = [key for key in self._services if key[0] == camera_id]
+            services = [self._services.pop(key) for key in keys]
+            for key in list(self._render_errors):
+                if key[0] == camera_id:
+                    self._render_errors.pop(key, None)
+        for service in services:
+            service.close_active(reason)
+            service.stop()

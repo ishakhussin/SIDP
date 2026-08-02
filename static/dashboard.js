@@ -152,12 +152,17 @@
         const missingGroups = (state.modelStatus?.groups || []).filter(
             (group) => activeDetectors.includes(group.detector) && !group.ready
         );
-        setText("ai-monitoring-status", missingGroups.length
-            ? "MODEL MISSING"
-            : (activeNames.length ? "ACTIVE" : "OFF"));
+        const cameraPowered = Boolean(camera?.power_on);
+        setText("ai-monitoring-status", !cameraPowered
+            ? "PAUSED"
+            : missingGroups.length
+                ? "MODEL MISSING"
+                : (activeNames.length ? "ACTIVE" : "OFF"));
         const inactiveMissing = !activeNames.length && state.modelStatus && !state.modelStatus.ready;
         setText("ai-monitoring-detail",
-            missingGroups.length
+            !cameraPowered
+                ? "Camera is off; all detector services are paused"
+                : missingGroups.length
                 ? `Install models for ${missingGroups.map((group) => group.label).join(" + ")}`
                 : detectorStatus?.last_error || proximityStatus?.last_error || ppeStatus?.last_error ||
                 (activeNames.length

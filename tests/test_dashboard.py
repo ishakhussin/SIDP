@@ -59,6 +59,7 @@ class DashboardTest(unittest.TestCase):
             self.assertIn(b"/power", response.data)
             self.assertIn(b"localStorage", response.data)
             self.assertIn(b"recent-events-refresh", response.data)
+            self.assertIn(b"all detector services are paused", response.data)
             self.assertIn(b"MODEL MISSING", response.data)
             self.assertIn(b"capture_fps", response.data)
             self.assertIn(b"/restricted-zone?preset=HOME", response.data)

@@ -1,0 +1,65 @@
+<!doctype html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SentryLab - Camera Overview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Material+Symbols+Outlined" rel="stylesheet">
+    <link href="{{ url_for('static', filename='pages.css') }}" rel="stylesheet">
+</head>
+<body>
+<header class="topbar">
+    <div class="top-left">
+        <a class="brand" href="/sentrylab-dashboard.html">SentryLab</a>
+        <nav class="nav" aria-label="Main navigation">
+            <a href="/sentrylab-dashboard.html">Dashboard</a>
+            <a class="active" href="/sentrylab-gallery.html">Overview</a>
+            <a href="/event.html">Event Log</a>
+        </nav>
+    </div>
+    <div class="connection" id="connection-badge"><span class="connection-dot"></span><span id="connection-label">Checking cameras</span></div>
+</header>
+
+<main class="page">
+    <section class="page-heading">
+        <div><div class="eyebrow">Camera gallery</div><h1>System Overview</h1><p class="subtitle">One view of camera health, live frames, performance, and safety activity.</p></div>
+        <div class="actions"><button class="btn" id="refresh-overview"><span class="material-symbols-outlined">refresh</span>Refresh</button><a class="btn primary" href="/sentrylab-dashboard.html"><span class="material-symbols-outlined">tune</span>Configure</a></div>
+    </section>
+
+    <section class="stats">
+        <div class="stat"><span class="stat-label">Configured cameras</span><strong class="stat-value" id="stat-cameras">0</strong></div>
+        <div class="stat"><span class="stat-label">Online now</span><strong class="stat-value green" id="stat-online">0</strong></div>
+        <div class="stat"><span class="stat-label">Active warnings</span><strong class="stat-value yellow" id="stat-warnings">0</strong></div>
+        <div class="stat"><span class="stat-label">Unsafe incidents</span><strong class="stat-value red" id="stat-unsafe">0</strong></div>
+    </section>
+
+    <section class="panel camera-toolbar">
+        <label class="field"><span class="material-symbols-outlined">search</span><input class="control" id="camera-search" placeholder="Search camera name or ID"></label>
+        <label class="field"><span class="material-symbols-outlined">sensors</span><select class="control" id="camera-state"><option value="">All states</option><option value="ONLINE">Online</option><option value="STOPPED">Stopped</option><option value="ERROR">Error</option><option value="DISABLED">Disabled</option><option value="UNCONFIGURED">Unconfigured</option></select></label>
+        <label class="field"><span class="material-symbols-outlined">sort</span><select class="control" id="camera-sort"><option value="id">Camera ID</option><option value="state">Connection state</option><option value="events">Unsafe activity</option></select></label>
+    </section>
+
+    <section class="camera-grid" id="camera-grid"></section>
+    <div class="panel empty" id="camera-empty"><span class="material-symbols-outlined" style="font-size:48px">videocam_off</span><h2>No matching cameras</h2><p>Change the search or state filter.</p></div>
+</main>
+
+<div class="modal" id="camera-modal" role="dialog" aria-modal="true" aria-labelledby="camera-modal-title">
+    <div class="modal-card">
+        <header class="modal-head"><h2 id="camera-modal-title">Live camera</h2><button class="icon-btn" id="camera-modal-close" aria-label="Close"><span class="material-symbols-outlined">close</span></button></header>
+        <div class="modal-body">
+            <div class="video-wrap"><img id="camera-live-feed" alt="Selected live camera feed"><div class="notice" id="camera-feed-notice">Camera stream is unavailable.</div></div>
+            <div class="detail-grid" style="margin:16px 0 0">
+                <div class="detail"><span>State</span><strong id="camera-detail-state">-</strong></div>
+                <div class="detail"><span>Resolution</span><strong id="camera-detail-resolution">-</strong></div>
+                <div class="detail"><span>Capture rate</span><strong id="camera-detail-fps">-</strong></div>
+                <div class="detail"><span>Reconnects</span><strong id="camera-detail-reconnects">-</strong></div>
+            </div>
+        </div>
+        <footer class="modal-foot"><a class="btn" id="camera-events-link"><span class="material-symbols-outlined">list_alt</span>View events</a><a class="btn primary" href="/sentrylab-dashboard.html"><span class="material-symbols-outlined">tune</span>Configure camera</a></footer>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='overview.js') }}"></script>
+</body>
+</html>

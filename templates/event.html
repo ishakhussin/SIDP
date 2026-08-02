@@ -1,0 +1,90 @@
+<!doctype html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SentryLab - Event Log</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Material+Symbols+Outlined" rel="stylesheet">
+    <link href="{{ url_for('static', filename='pages.css') }}" rel="stylesheet">
+</head>
+<body>
+<header class="topbar">
+    <div class="top-left">
+        <a class="brand" href="/sentrylab-dashboard.html">SentryLab</a>
+        <nav class="nav" aria-label="Main navigation">
+            <a href="/sentrylab-dashboard.html">Dashboard</a>
+            <a href="/sentrylab-gallery.html">Overview</a>
+            <a class="active" href="/event.html">Event Log</a>
+        </nav>
+    </div>
+    <div class="connection" id="connection-badge"><span class="connection-dot"></span><span id="connection-label">Checking system</span></div>
+</header>
+
+<main class="page">
+    <section class="page-heading">
+        <div>
+            <div class="eyebrow">Safety timeline</div>
+            <h1>Event Log</h1>
+            <p class="subtitle">A concise timeline of SAFE heartbeats, warnings, confirmed violations, and recovery.</p>
+        </div>
+        <div class="actions">
+            <button class="btn" id="export-selected" disabled><span class="material-symbols-outlined">folder_zip</span>Export selected</button>
+            <a class="btn primary" href="/api/log-entries/export.csv"><span class="material-symbols-outlined">download</span>Export CSV</a>
+        </div>
+    </section>
+
+    <section class="stats" aria-label="Safety log totals">
+        <div class="stat"><span class="stat-label">Loaded logs</span><strong class="stat-value" id="stat-total">0</strong></div>
+        <div class="stat"><span class="stat-label">Safe</span><strong class="stat-value green" id="stat-safe">0</strong></div>
+        <div class="stat"><span class="stat-label">Warnings</span><strong class="stat-value yellow" id="stat-warning">0</strong></div>
+        <div class="stat"><span class="stat-label">Unsafe</span><strong class="stat-value red" id="stat-unsafe">0</strong></div>
+    </section>
+
+    <section class="panel filters" aria-label="Event filters">
+        <label class="field"><span class="material-symbols-outlined">search</span><input class="control" id="search-filter" placeholder="Search camera, detector, or ID"></label>
+        <label class="field"><span class="material-symbols-outlined">videocam</span><select class="control" id="camera-filter"><option value="">All cameras</option></select></label>
+        <label class="field"><span class="material-symbols-outlined">category</span><select class="control" id="detector-filter"><option value="">All use cases</option><option value="monitoring">Safe Monitoring</option><option value="restricted_zone">Restricted Zone</option><option value="unsafe_proximity">Unsafe Proximity</option><option value="ppe_compliance">PPE Compliance</option></select></label>
+        <label class="field"><span class="material-symbols-outlined">shield</span><select class="control" id="severity-filter"><option value="">All outcomes</option><option value="SAFE">Safe</option><option value="WARNING">Warning</option><option value="UNSAFE">Unsafe</option></select></label>
+        <button class="btn" id="clear-filters"><span class="material-symbols-outlined">filter_alt_off</span>Clear</button>
+    </section>
+
+    <section class="panel table-panel">
+        <div class="table-scroll">
+            <table>
+                <thead><tr>
+                    <th class="check-cell"><input id="select-all" type="checkbox" aria-label="Select all visible incidents"></th>
+                    <th>Time</th><th>Camera</th><th>Use case</th><th>Status</th><th>Description</th><th class="hide-mobile">Evidence</th><th style="text-align:right">Actions</th>
+                </tr></thead>
+                <tbody id="event-rows"></tbody>
+            </table>
+        </div>
+        <div class="empty" id="empty-state"><span class="material-symbols-outlined" style="font-size:48px">search_off</span><h2>No matching logs</h2><p>Try clearing one or more filters.</p></div>
+        <footer class="pager">
+            <span class="small" id="page-summary">Showing 0 logs</span>
+            <div class="pager-controls"><button class="icon-btn" id="previous-page" aria-label="Previous page"><span class="material-symbols-outlined">chevron_left</span></button><span class="small" id="page-number">Page 1 of 1</span><button class="icon-btn" id="next-page" aria-label="Next page"><span class="material-symbols-outlined">chevron_right</span></button></div>
+        </footer>
+    </section>
+</main>
+
+<div class="modal" id="incident-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-card">
+        <header class="modal-head"><h2 id="modal-title">Incident details</h2><button class="icon-btn" id="modal-close" aria-label="Close"><span class="material-symbols-outlined">close</span></button></header>
+        <div class="modal-body">
+            <div class="detail-grid">
+                <div class="detail"><span>Camera</span><strong id="detail-camera">-</strong></div>
+                <div class="detail"><span>Use case</span><strong id="detail-detector">-</strong></div>
+                <div class="detail"><span>Outcome</span><strong id="detail-outcome">-</strong></div>
+                <div class="detail"><span>Incident duration</span><strong id="detail-duration">-</strong></div>
+            </div>
+            <p class="small" style="margin:0 2px 9px"><strong style="color:var(--text)">Evidence clip: 10 seconds</strong> · 3 seconds before confirmation + 7 seconds after.</p>
+            <div class="video-wrap"><video id="incident-video" controls playsinline></video><div class="notice" id="clip-notice">Evidence clip is not available for this incident.</div></div>
+            <p class="small" id="detail-note" style="margin:14px 2px 0"></p>
+        </div>
+        <footer class="modal-foot"><button class="btn danger" id="delete-incident"><span class="material-symbols-outlined">delete</span>Delete</button><a class="btn primary" id="download-clip" download><span class="material-symbols-outlined">download</span>Download clip</a></footer>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='event.js') }}"></script>
+</body>
+</html>

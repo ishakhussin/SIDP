@@ -1,0 +1,29 @@
+{
+  "cameras": [
+    {
+      "id": "CAM 01",
+      "name": "Tapo C200",
+      "type": "rtsp",
+      "enabled": true,
+      "rtsp_url_env": "SENTRYLAB_CAM01_RTSP_URL"
+    },
+    {
+      "id": "CAM 02",
+      "name": "eMeet USB Camera",
+      "type": "usb",
+      "enabled": true,
+      "device_index": 0,
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "codec": "MJPG",
+      "backend": "dshow"
+    },
+    {
+      "id": "CAM 03",
+      "name": "Future Camera",
+      "type": "unconfigured",
+      "enabled": false
+    }
+  ]
+}

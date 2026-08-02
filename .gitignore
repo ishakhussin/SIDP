@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local environments and credentials
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Runtime data and evidence
+data/
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.mp4
+*.webm
+
+# AI model weights (documented separately)
+models/*
+!models/README.md
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.ckpt
+*.engine
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

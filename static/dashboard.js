@@ -153,9 +153,6 @@
         const restricted = restrictedSettings(cameraId);
         const proximity = proximitySettings(cameraId);
         const ppe = ppeSettings(cameraId);
-        const detectorStatus = state.restrictedStatus[cameraId];
-        const proximityStatus = state.proximityStatus[cameraId];
-        const ppeStatus = state.ppeStatus[cameraId];
         const activeNames = [];
         if (restricted.enabled) activeNames.push("Restricted Zone");
         if (proximity.enabled) activeNames.push("Unsafe Proximity");
@@ -168,24 +165,20 @@
             (group) => activeDetectors.includes(group.detector) && !group.ready
         );
         const cameraPowered = Boolean(camera?.power_on);
-        setText("ai-monitoring-status", !cameraPowered
-            ? "PAUSED"
-            : missingGroups.length
-                ? "MODEL MISSING"
-                : (activeNames.length ? "ACTIVE" : "OFF"));
-        const inactiveMissing = !activeNames.length && state.modelStatus && !state.modelStatus.ready;
+        const monitoringActive = cameraPowered
+            && activeNames.length > 0
+            && missingGroups.length < activeNames.length;
+        setText("ai-monitoring-status", monitoringActive ? "ACTIVE" : "INACTIVE");
         setText("ai-monitoring-detail",
-            !cameraPowered
-                ? "Camera is off; all detector services are paused"
-                : missingGroups.length
-                ? `Install models for ${missingGroups.map((group) => group.label).join(" + ")}`
-                : detectorStatus?.last_error || proximityStatus?.last_error || ppeStatus?.last_error ||
-                (activeNames.length
-                    ? `${activeNames.join(" + ")} monitoring enabled`
-                    : inactiveMissing
-                        ? `${state.modelStatus.missing_count} AI model files are not installed`
-                        : "No AI detector enabled")
-        );
+            monitoringActive ? "AI monitoring is active" : "AI monitoring is inactive");
+        const monitoringStatus = byId("ai-monitoring-status");
+        if (monitoringStatus) {
+            monitoringStatus.className = `px-2.5 py-1 text-[10px] font-bold rounded-full ${
+                monitoringActive
+                    ? "bg-green-500/20 text-green-400"
+                    : "bg-surface-variant text-on-surface-variant"
+            }`;
+        }
         setText("camera-status-last-update", camera?.last_frame_at
             ? new Date(camera.last_frame_at * 1000).toLocaleTimeString()
             : "—");
@@ -467,7 +460,7 @@
             }
         } catch (error) {
             if (cameraId === selectedCameraId()) {
-                setText("ai-monitoring-detail", `Restricted Zone status unavailable: ${error.message}`);
+                updateStatusCard();
             }
         }
     }

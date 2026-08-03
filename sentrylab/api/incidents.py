@@ -210,10 +210,15 @@ def list_incidents():
 
 @incidents_blueprint.get("/api/dashboard/summary")
 def dashboard_summary():
-    return jsonify(_repository().summary(
-        camera_id=request.args.get("camera_id") or None,
+    camera_id = request.args.get("camera_id") or None
+    summary = _repository().summary(
+        camera_id=camera_id,
         recent_limit=request.args.get("recent_limit", 5, type=int),
-    ))
+    )
+    safe_heartbeats = _monitoring_repository().count(camera_id=camera_id)
+    summary["safe"] += safe_heartbeats
+    summary["total_events"] += safe_heartbeats
+    return jsonify(summary)
 
 
 @incidents_blueprint.get("/api/log-entries")

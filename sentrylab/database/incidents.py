@@ -293,10 +293,11 @@ class IncidentRepository:
         parameters = [camera_id] if camera_id else []
         with self.database.session() as connection:
             counts = connection.execute(
-                f"SELECT COUNT(*) total, "
-                "SUM(CASE WHEN unsafe_at IS NULL THEN 1 ELSE 0 END) warnings, "
+                f"SELECT COUNT(*) warnings, "
                 "SUM(CASE WHEN unsafe_at IS NOT NULL THEN 1 ELSE 0 END) unsafe, "
-                "SUM(CASE WHEN current_level = 'CLOSED' THEN 1 ELSE 0 END) closed "
+                "SUM(CASE WHEN current_level = 'CLOSED' THEN 1 ELSE 0 END) closed, "
+                "SUM(CASE WHEN closed_at IS NOT NULL AND close_reason IN "
+                "('all subjects recovered', 'subject left frame') THEN 1 ELSE 0 END) safe "
                 f"FROM incidents {where}",
                 parameters,
             ).fetchone()
@@ -305,13 +306,15 @@ class IncidentRepository:
                 parameters + [max(1, min(int(recent_limit), 50))],
             ).fetchall()
         return {
-            "total_events": int(counts["total"] or 0),
+            "total_events": (
+                int(counts["warnings"] or 0)
+                + int(counts["unsafe"] or 0)
+                + int(counts["safe"] or 0)
+            ),
             "warnings": int(counts["warnings"] or 0),
             "unsafe": int(counts["unsafe"] or 0),
+            "safe": int(counts["safe"] or 0),
             "closed": int(counts["closed"] or 0),
-            # Incidents contain violations only; a true SAFE percentage will
-            # require a monitoring-uptime aggregate in a later stage.
-            "safe_pct": None,
             "recent_incidents": [dict(row) for row in recent],
         }
 

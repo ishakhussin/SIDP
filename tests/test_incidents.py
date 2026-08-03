@@ -174,6 +174,7 @@ class IncidentApiTest(unittest.TestCase):
             "/api/dashboard/summary?camera_id=CAM%2001"
         ).get_json()
         self.assertEqual(summary["total_events"], 1)
+        self.assertEqual(summary["safe"], 0)
         self.assertEqual(summary["warnings"], 1)
         self.assertEqual(summary["unsafe"], 0)
 
@@ -203,6 +204,14 @@ class IncidentApiTest(unittest.TestCase):
             entry["incident_id"] == incident["id"]
             for entry in entries[:-1]
         ))
+
+        summary = self.client.get(
+            "/api/dashboard/summary?camera_id=CAM%2001"
+        ).get_json()
+        self.assertEqual(summary["safe"], 2)
+        self.assertEqual(summary["warnings"], 1)
+        self.assertEqual(summary["unsafe"], 1)
+        self.assertEqual(summary["total_events"], 4)
 
         export = self.client.get("/api/log-entries/export.csv")
         self.assertEqual(export.status_code, 200)

@@ -391,7 +391,7 @@
             if (!response.ok) throw new Error(`Incident summary ${response.status}`);
             const summary = await response.json();
             setText("stat-total-events", summary.total_events);
-            setText("stat-safe-pct", summary.safe_pct === null ? "—" : `${summary.safe_pct}%`);
+            setText("stat-safe-pct", summary.safe);
             setText("stat-warnings", summary.warnings);
             setText("stat-unsafe", summary.unsafe);
             renderRecentIncidents(summary.recent_incidents);

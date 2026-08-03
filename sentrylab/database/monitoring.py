@@ -50,3 +50,13 @@ class MonitoringLogRepository:
                 parameters,
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def count(self, camera_id: str | None = None) -> int:
+        where = "WHERE camera_id = ?" if camera_id else ""
+        parameters = [camera_id] if camera_id else []
+        with self.database.session() as connection:
+            row = connection.execute(
+                f"SELECT COUNT(*) count FROM monitoring_logs {where}",
+                parameters,
+            ).fetchone()
+        return int(row["count"] or 0)
